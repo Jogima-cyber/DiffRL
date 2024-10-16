@@ -37,6 +37,9 @@ params:
     num_actors: 64 
     save_interval: 400
 
+    wandb_track: True
+    wandb_project_name: neuro_diff_sim
+
     player:
       determenistic: True
       games_num: 1

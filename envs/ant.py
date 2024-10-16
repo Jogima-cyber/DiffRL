@@ -183,7 +183,42 @@ class AntEnv(DFlexEnv):
                 }
 
         if len(env_ids) > 0:
-           self.reset(env_ids)
+            self.reset(env_ids)
+
+        self.render()
+
+        return self.obs_buf, self.rew_buf, self.reset_buf, self.extras
+
+    def neurodiff_step(self, actions):
+        actions = actions.view((self.num_envs, self.num_actions))
+
+        actions = torch.clip(actions, -1., 1.)
+
+        self.actions = actions.clone()
+
+        self.state.joint_act.view(self.num_envs, -1)[:, 6:] = actions * self.action_strength
+        
+        self.state = self.integrator.forward(self.model, self.state, self.sim_dt, self.sim_substeps, self.MM_caching_frequency)
+        self.sim_time += self.sim_dt
+
+        self.reset_buf = torch.zeros_like(self.reset_buf)
+
+        self.progress_buf += 1
+        self.num_frames += 1
+
+        self.calculateObservations()
+        self.calculateReward()
+
+        env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
+
+        self.obs_buf_before_reset = self.obs_buf.clone()
+        self.extras = {
+            'obs_before_reset': self.obs_buf_before_reset,
+            'episode_end': self.termination_buf
+        }
+
+        if len(env_ids) > 0:
+            self.reset(env_ids)
 
         self.render()
 
@@ -305,3 +340,13 @@ class AntEnv(DFlexEnv):
         if self.early_termination:
             self.reset_buf = torch.where(self.obs_buf[:, 0] < self.termination_height, torch.ones_like(self.reset_buf), self.reset_buf)
         self.reset_buf = torch.where(self.progress_buf > self.episode_length - 1, torch.ones_like(self.reset_buf), self.reset_buf)
+
+    def diffRecalculateReward(self, obs, actions, offids = None):
+        up_reward = 0.1 * obs[:, 27]
+        heading_reward = obs[:, 28]
+        height_reward = obs[:, 0] - self.termination_height
+
+        progress_reward = obs[:, 5]
+
+        rew = progress_reward + up_reward + heading_reward + height_reward + torch.sum(actions ** 2, dim = -1) * self.action_penalty
+        return rew

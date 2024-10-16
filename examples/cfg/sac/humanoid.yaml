@@ -34,7 +34,7 @@ params:
     reward_shaper:
       scale_value: 1
     device: cuda
-    max_epochs: 5000
+    max_epochs: 488 # 5000
     num_steps_per_episode: 128
     save_best_after: 100
     save_frequency: 10000
@@ -49,6 +49,9 @@ params:
     num_seed_steps: 2
     replay_buffer_size: 1000000
     num_actors: 64
+
+    wandb_track: True
+    wandb_project_name: neuro_diff_sim
 
     env_config:
       env_name: 'humanoid'

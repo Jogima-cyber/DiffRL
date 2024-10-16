@@ -19,6 +19,8 @@ def get_activation_func(activation_name):
         return nn.ReLU()
     elif activation_name.lower() == 'elu':
         return nn.ELU()
+    elif activation_name.lower() == 'silu':
+        return nn.SiLU()
     elif activation_name.lower() == 'identity':
         return nn.Identity()
     else:

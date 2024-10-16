@@ -1,3 +1,4 @@
+
 # Copyright (c) 2022 NVIDIA CORPORATION.  All rights reserved.
 # NVIDIA CORPORATION and its licensors retain all intellectual property
 # and proprietary rights in and to this software, related documentation
@@ -100,6 +101,21 @@ class SHAC:
                         deleted_keys.append(key)
                 for key in deleted_keys:
                     del save_cfg['params']['general'][key]
+
+            if cfg['params']['config'].get('wandb_track', False):
+                import wandb
+
+                cfg['env_id'] = cfg['params']['diff_env']['name']
+                cfg['exp_name'] = cfg["params"]["general"]['exp_name']
+
+                wandb.init(
+                    project=cfg['params']['config']['wandb_project_name'],
+                    sync_tensorboard=True,
+                    config=cfg,
+                    name=self.name,
+                    monitor_gym=True,
+                    save_code=True,
+                )
 
             yaml.dump(save_cfg, open(os.path.join(self.log_dir, 'cfg.yaml'), 'w'))
             self.writer = SummaryWriter(os.path.join(self.log_dir, 'log'))

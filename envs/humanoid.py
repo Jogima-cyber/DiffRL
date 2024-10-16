@@ -231,12 +231,48 @@ class HumanoidEnv(DFlexEnv):
                 }
 
         if len(env_ids) > 0:
-           self.reset(env_ids)
+            self.reset(env_ids)
 
         self.render()
 
         return self.obs_buf, self.rew_buf, self.reset_buf, self.extras
-    
+
+    def neurodiff_step(self, actions):
+        actions = actions.view((self.num_envs, self.num_actions))
+
+        # todo - make clip range a parameter
+        actions = torch.clip(actions, -1., 1.)
+
+        self.actions = actions.clone()
+        
+       	self.state.joint_act.view(self.num_envs, -1)[:, 6:] = actions * self.motor_scale * self.motor_strengths
+        self.state = self.integrator.forward(self.model, self.state, self.sim_dt, self.sim_substeps, self.MM_caching_frequency)
+        
+       	self.sim_time += self.sim_dt
+
+        self.reset_buf = torch.zeros_like(self.reset_buf)
+
+        self.progress_buf += 1
+        self.num_frames += 1
+
+        self.calculateObservations()
+        self.calculateReward()
+
+        env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
+
+        self.obs_buf_before_reset = self.obs_buf.clone()
+        self.extras = {
+            'obs_before_reset': self.obs_buf_before_reset,
+            'episode_end': self.termination_buf
+        }
+
+        if len(env_ids) > 0:
+            self.reset(env_ids)
+
+        self.render()
+
+        return self.obs_buf, self.rew_buf, self.reset_buf, self.extras
+
     def reset(self, env_ids = None, force_reset = True):
         if env_ids is None:
             if force_reset == True:
@@ -361,9 +397,29 @@ class HumanoidEnv(DFlexEnv):
         nan_masks = torch.logical_or(torch.isnan(self.obs_buf).sum(-1) > 0, torch.logical_or(torch.isnan(self.state.joint_q.view(self.num_environments, -1)).sum(-1) > 0, torch.isnan(self.state.joint_qd.view(self.num_environments, -1)).sum(-1) > 0))
         inf_masks = torch.logical_or(torch.isinf(self.obs_buf).sum(-1) > 0, torch.logical_or(torch.isinf(self.state.joint_q.view(self.num_environments, -1)).sum(-1) > 0, torch.isinf(self.state.joint_qd.view(self.num_environments, -1)).sum(-1) > 0))
         invalid_value_masks = torch.logical_or((torch.abs(self.state.joint_q.view(self.num_environments, -1)) > 1e6).sum(-1) > 0,
-                                                (torch.abs(self.state.joint_qd.view(self.num_environments, -1)) > 1e6).sum(-1) > 0)   
+                                                (torch.abs(self.state.joint_qd.view(self.num_environments, -1)) > 1e6).sum(-1) > 0)
         invalid_masks = torch.logical_or(invalid_value_masks, torch.logical_or(nan_masks, inf_masks))
+        self.invalid_masks = invalid_masks.clone()
         
         self.reset_buf = torch.where(invalid_masks, torch.ones_like(self.reset_buf), self.reset_buf)
     
         self.rew_buf[invalid_masks] = 0.
+
+    def diffRecalculateReward(self, obs, actions, offids = None):
+        up_reward = 0.1 * obs[:, 53]
+        heading_reward = obs[:, 54]
+
+        height_diff = obs[:, 0] - (self.termination_height + self.termination_tolerance)
+        height_reward = torch.clip(height_diff, -1.0, self.termination_tolerance)
+        height_reward = torch.where(height_reward < 0.0, -200.0 * height_reward * height_reward, height_reward)
+        height_reward = torch.where(height_reward > 0.0, self.height_rew_scale * height_reward, height_reward)
+
+        progress_reward = obs[:, 5]
+
+        rew = progress_reward + up_reward + heading_reward + height_reward + torch.sum(actions ** 2, dim = -1) * self.action_penalty
+        if offids is None:
+            rew[self.invalid_masks] = 0.
+        else:
+            rew[self.invalid_masks[offids]] = 0.
+
+        return rew

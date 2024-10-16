@@ -77,7 +77,9 @@ def get_args(): # TODO: delve into the arguments
         {"name": "--device", "type": str, "default": "cuda:0"},
         {"name": "--seed", "type": int, "default": 0, "help": "Random seed"},
         {"name": "--render", "action": "store_true", "default": False,
-            "help": "whether generate rendering file."}]
+            "help": "whether generate rendering file."},
+        {"name": "--exp_name", "type": str, "default": "no_name",
+            "help": "Experiment name for pairing with wandb and openrlbenchmark"}]
     
     # parse arguments
     args = parse_arguments(

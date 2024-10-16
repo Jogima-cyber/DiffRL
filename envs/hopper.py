@@ -178,12 +178,47 @@ class HopperEnv(DFlexEnv):
                 }
 
         if len(env_ids) > 0:
-           self.reset(env_ids)
+            self.reset(env_ids)
 
         self.render()
 
         return self.obs_buf, self.rew_buf, self.reset_buf, self.extras
-    
+
+    def neurodiff_step(self, actions):
+        actions = actions.view((self.num_envs, self.num_actions))
+
+        actions = torch.clip(actions, -1., 1.)
+
+        self.actions = actions.clone()
+
+        self.state.joint_act.view(self.num_envs, -1)[:, 3:] = actions * self.action_strength
+        
+        self.state = self.integrator.forward(self.model, self.state, self.sim_dt, self.sim_substeps, self.MM_caching_frequency)
+        self.sim_time += self.sim_dt
+
+        self.reset_buf = torch.zeros_like(self.reset_buf)
+
+        self.progress_buf += 1
+        self.num_frames += 1
+
+        self.calculateObservations()
+        self.calculateReward()
+
+        env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
+
+        self.obs_buf_before_reset = self.obs_buf.clone()
+        self.extras = {
+            'obs_before_reset': self.obs_buf_before_reset,
+            'episode_end': self.termination_buf
+        }
+
+        if len(env_ids) > 0:
+            self.reset(env_ids)
+
+        self.render()
+
+        return self.obs_buf, self.rew_buf, self.reset_buf, self.extras
+
     def reset(self, env_ids = None, force_reset = True):
         if env_ids is None:
             if force_reset == True:
@@ -275,3 +310,16 @@ class HopperEnv(DFlexEnv):
         self.reset_buf = torch.where(self.progress_buf > self.episode_length - 1, torch.ones_like(self.reset_buf), self.reset_buf)
         if self.early_termination:
             self.reset_buf = torch.where(self.obs_buf[:, 0] < self.termination_height, torch.ones_like(self.reset_buf), self.reset_buf)
+
+    def diffRecalculateReward(self, obs, actions, offids = None):
+        height_diff = obs[:, 0] - (self.termination_height + self.termination_height_tolerance)
+        height_reward = torch.clip(height_diff, -1.0, 0.3)
+        height_reward = torch.where(height_reward < 0.0, -200.0 * height_reward * height_reward, height_reward)
+        height_reward = torch.where(height_reward > 0.0, self.height_rew_scale * height_reward, height_reward)
+        
+       	angle_reward = 1. * (-obs[:, 1] ** 2 / (self.termination_angle ** 2) + 1.)
+
+        progress_reward = obs[:, 5]
+
+        rew = progress_reward + height_reward + angle_reward + torch.sum(actions ** 2, dim = -1) * self.action_penalty
+        return rew

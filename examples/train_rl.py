@@ -10,28 +10,19 @@ import sys, os
 project_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(project_dir)
 
-from rl_games.common import env_configurations, experiment, vecenv
-from rl_games.common.algo_observer import AlgoObserver
-from rl_games.torch_runner import Runner
-from rl_games.algos_torch import torch_ext
-
 import argparse
 
-import envs
+#import envs
 import os
 import sys
 import yaml
 
 import numpy as np
 import copy
-import torch
-
-from utils.common import *
-
 
 def create_dflex_env(**kwargs):
     env_fn = getattr(envs, cfg_train["params"]["diff_env"]["name"])
-    
+
     env = env_fn(num_envs=cfg_train["params"]["config"]["num_actors"], \
         render=args.render, seed=args.seed, \
         episode_length=cfg_train["params"]["diff_env"].get("episode_length", 1000), \
@@ -48,44 +39,66 @@ def create_dflex_env(**kwargs):
 
     return env
 
+def create_isaac_env(**kwargs):
+    import isaacgymenvs
+    env = isaacgymenvs.make(
+        seed=cfg_train["params"]["general"]["seed"],
+        task=cfg_train["params"]["isaac_gym"]["name"],
+        num_envs=cfg_train["params"]["config"]["num_actors"],
+        sim_device="cuda:0",
+        rl_device="cuda:0",
+        headless=True
+    )
 
-class RLGPUEnv(vecenv.IVecEnv):
-    def __init__(self, config_name, num_actors, **kwargs):
-        self.env = env_configurations.configurations[config_name]['env_creator'](**kwargs)
+    return env
 
-        self.full_state = {}
 
-        self.rl_device = "cuda:0"
+def register_env():
+    class RLGPUEnv(vecenv.IVecEnv):
+        def __init__(self, config_name, num_actors, **kwargs):
+            self.env = env_configurations.configurations[config_name]['env_creator'](**kwargs)
+            self.full_state = {}
 
-        self.full_state["obs"] = self.env.reset(force_reset=True).to(self.rl_device)
-        print(self.full_state["obs"].shape)
+            self.rl_device = "cuda:0"
 
-    def step(self, actions):
-        self.full_state["obs"], reward, is_done, info = self.env.step(actions.to(self.env.device))
+            if args.env_type == "isaac_gym":
+                self.full_state["obs"] = self.env.reset()["obs"].to(self.rl_device)
+            else:
+                self.full_state["obs"] = self.env.reset(force_reset=True).to(self.rl_device)
 
-        return self.full_state["obs"].to(self.rl_device), reward.to(self.rl_device), is_done.to(self.rl_device), info
+        def step(self, actions):
+            next_state, reward, is_done, info = self.env.step(actions.to(self.env.device))
+            self.full_state["obs"] = next_state["obs"]
 
-    def reset(self):
-        self.full_state["obs"] = self.env.reset(force_reset=True)
+            return self.full_state["obs"].to(self.rl_device), reward.to(self.rl_device), is_done.to(self.rl_device), info
 
-        return self.full_state["obs"].to(self.rl_device)
+        def reset(self):
+            if not args.env_type == "isaac_gym":
+                self.full_state["obs"] = self.env.reset(force_reset=True)
 
-    def get_number_of_agents(self):
-        return self.env.get_number_of_agents()
+            return self.full_state["obs"].to(self.rl_device)
 
-    def get_env_info(self):
-        info = {}
-        info['action_space'] = self.env.action_space
-        info['observation_space'] = self.env.observation_space
+        def get_number_of_agents(self):
+            return self.env.get_number_of_agents()
 
-        print(info['action_space'], info['observation_space'])
+        def get_env_info(self):
+            info = {}
+            info['action_space'] = self.env.action_space
+            info['observation_space'] = self.env.observation_space
 
-        return info
+            print(info['action_space'], info['observation_space'])
 
-vecenv.register('DFLEX', lambda config_name, num_actors, **kwargs: RLGPUEnv(config_name, num_actors, **kwargs))
-env_configurations.register('dflex', {
-    'env_creator': lambda **kwargs: create_dflex_env(**kwargs),
-    'vecenv_type': 'DFLEX'})
+            return info
+
+    vecenv.register('DFLEX', lambda config_name, num_actors, **kwargs: RLGPUEnv(config_name, num_actors, **kwargs))
+    env_configurations.register('dflex', {
+        'env_creator': lambda **kwargs: create_dflex_env(**kwargs),
+        'vecenv_type': 'DFLEX'})
+
+    vecenv.register('ISAAC', lambda config_name, num_actors, **kwargs: RLGPUEnv(config_name, num_actors, **kwargs))
+    env_configurations.register('isaac', {
+        'env_creator': lambda **kwargs: create_isaac_env(**kwargs),
+        'vecenv_type': 'ISAAC'})
 
 def parse_arguments(description="Testing Args", custom_parameters=[]):
     parser = argparse.ArgumentParser()
@@ -139,7 +152,11 @@ def get_args(): # TODO: delve into the arguments
             "help": "whether generate rendering file."},
         {"name": "--logdir", "type": str, "default": "logs/tmp/rl/"},
         {"name": "--no-time-stamp", "action": "store_true", "default": False,
-            "help": "whether not add time stamp at the log path"}]
+            "help": "whether not add time stamp at the log path"},
+        {"name": "--env_type", "type": str, "default": "dflex",
+            "help": "isaac_gym or dflex for the simulator."},
+        {"name": "--exp_name", "type": str, "default": "no_name",
+            "help": "Experiment name for pairing with wandb and openrlbenchmark"}]
 
     # parse arguments
     args = parse_arguments(
@@ -147,8 +164,6 @@ def get_args(): # TODO: delve into the arguments
         custom_parameters=custom_parameters)
     
     return args
-
-
 
 if __name__ == '__main__':
 
@@ -160,14 +175,27 @@ if __name__ == '__main__':
     if args.play or args.test:
         cfg_train["params"]["config"]["num_actors"] = cfg_train["params"]["config"].get("player", {}).get("num_actors", 1)
 
+    if args.env_type == "isaac_gym":
+        import isaacgym
+
+    from utils.common import get_time_stamp
+    import torch
+    from rl_games.common import env_configurations, experiment, vecenv
+    from rl_games.common.algo_observer import AlgoObserver
+    from rl_games.torch_runner import Runner
+    from rl_games.algos_torch import torch_ext
+    from rl_games.common import env_configurations, experiment, vecenv
+
+    register_env()
+
     if not args.no_time_stamp:
         args.logdir = os.path.join(args.logdir, get_time_stamp())
 
     if args.num_envs > 0:
         cfg_train["params"]["config"]["num_actors"] = args.num_envs
-        
+
     vargs = vars(args)
-    
+
     cfg_train["params"]["general"] = {}
     for key in vargs.keys():
         cfg_train["params"]["general"][key] = vargs[key]
@@ -178,7 +206,22 @@ if __name__ == '__main__':
         os.makedirs(log_dir, exist_ok = True)
         # save config
         yaml.dump(cfg_train, open(os.path.join(log_dir, 'cfg.yaml'), 'w'))
-        
+
+    if cfg_train['params']['config'].get('wandb_track', False):
+        import wandb
+
+        cfg_train['env_id'] = cfg_train['params']['diff_env']['name']
+        cfg_train['exp_name'] = cfg_train["params"]["general"]['exp_name']
+
+        wandb.init(
+            project=cfg_train['params']['config']['wandb_project_name'],
+            sync_tensorboard=True,
+            config=cfg_train,
+            name=cfg_train['params']['config'].get('name', "Ant"),
+            monitor_gym=True,
+            save_code=True,
+        )
+
     runner = Runner()
     runner.load(cfg_train)
     runner.reset()

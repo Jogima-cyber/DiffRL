@@ -23,7 +23,7 @@ class ActorDeterministicMLP(nn.Module):
 
         init_ = lambda m: model_utils.init(m, nn.init.orthogonal_, lambda x: nn.init.
                         constant_(x, 0), np.sqrt(2))
-                        
+
         modules = []
         for i in range(len(self.layer_dims) - 1):
             modules.append(init_(nn.Linear(self.layer_dims[i], self.layer_dims[i + 1])))
@@ -65,7 +65,7 @@ class ActorStochasticMLP(nn.Module):
                 modules.append(torch.nn.LayerNorm(self.layer_dims[i+1]))
             else:
                 modules.append(model_utils.get_activation_func('identity'))
-            
+
         self.mu_net = nn.Sequential(*modules).to(device)
 
         logstd = cfg_network.get('actor_logstd_init', -1.0)
@@ -75,13 +75,19 @@ class ActorStochasticMLP(nn.Module):
         self.action_dim = action_dim
         self.obs_dim = obs_dim
 
+        self.min_logstd = -1.427
+
         print(self.mu_net)
         print(self.logstd)
-    
+
+    def clamp_std(self):
+        self.logstd.data = torch.clamp(self.logstd.data, self.min_logstd)
+
     def get_logstd(self):
         return self.logstd
 
     def forward(self, obs, deterministic = False):
+        #self.clamp_std()
         mu = self.mu_net(obs)
 
         if deterministic:
@@ -93,7 +99,7 @@ class ActorStochasticMLP(nn.Module):
             dist = Normal(mu, std)
             sample = dist.rsample()
             return sample
-    
+
     def forward_with_dist(self, obs, deterministic = False):
         mu = self.mu_net(obs)
         std = self.logstd.exp() # (num_actions)
@@ -104,11 +110,15 @@ class ActorStochasticMLP(nn.Module):
             dist = Normal(mu, std)
             sample = dist.rsample()
             return sample, mu, std
-        
-    def evaluate_actions_log_probs(self, obs, actions):
+
+    def forward_with_log_probs(self, obs, actions = None):
         mu = self.mu_net(obs)
 
         std = self.logstd.exp()
         dist = Normal(mu, std)
+        sample = dist.rsample()
 
-        return dist.log_prob(actions)
+        if actions is None:
+            return sample, dist.log_prob(sample).sum(-1), dist.entropy().sum(-1)
+        else:
+            return sample, dist.log_prob(actions).sum(-1), dist.entropy().sum(-1)

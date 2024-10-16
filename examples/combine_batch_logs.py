@@ -13,7 +13,7 @@ from collections import defaultdict
 
 import numpy as np
 import shutil
-import tensorflow as tf
+#import tensorflow as tf
 from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 from tensorboardX import SummaryWriter
 import argparse
@@ -33,10 +33,15 @@ tag_mapping = {#'rewards0/frame': 'policy_loss/step', 'rewards0/iter': 'policy_l
 def tabulate_events(dpath):
 
     summary_iterators = []
-    for dname in os.listdir(dpath):
+    """for dname in os.listdir(dpath):
         for subfolder_name in args.subfolder_names:
             if os.path.exists(os.path.join(dpath, dname, subfolder_name)):
                 summary_iterators.append(EventAccumulator(os.path.join(dpath, dname, subfolder_name)).Reload())
+                break"""
+    for root, dirs, files in os.walk(dpath):
+        for subfolder_name in args.subfolder_names:
+            if os.path.exists(os.path.join(root, subfolder_name)):
+                summary_iterators.append(EventAccumulator(os.path.join(root, subfolder_name)).Reload())
                 break
             
     tags = summary_iterators[0].Tags()['scalars']
