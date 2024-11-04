@@ -74,7 +74,7 @@ class StochSSM(nn.Module):
 
         modules = []
         for i in range(len(self.layer_dims) - 1):
-            """modules.append(nn.Linear(self.layer_dims[i], self.layer_dims[i + 1]))
+            modules.append(nn.Linear(self.layer_dims[i], self.layer_dims[i + 1]))
             if i < len(self.layer_dims) - 2:
                 if i == 0:
                     modules.append(SimNorm(8))
@@ -82,12 +82,12 @@ class StochSSM(nn.Module):
                     modules.append(model_utils.get_activation_func(cfg_network['dyn_model_mlp']['activation']))
                 #modules.append(model_utils.get_activation_func(cfg_network['dyn_model_mlp']['activation']))
                 #modules.append(SimNorm(8))
-                modules.append(torch.nn.LayerNorm(self.layer_dims[i+1], eps=1e-03))"""
-            if i < len(self.layer_dims) - 2:
+                modules.append(torch.nn.LayerNorm(self.layer_dims[i+1], eps=1e-03))
+            """if i < len(self.layer_dims) - 2:
                 if i == 0:
                     modules.append(ResidualBlock(self.layer_dims[i], self.layer_dims[i + 1], SimNorm(8)))
                 else:
-                    modules.append(ResidualBlock(self.layer_dims[i], self.layer_dims[i + 1], model_utils.get_activation_func(cfg_network['dyn_model_mlp']['activation'])))
+                    modules.append(ResidualBlock(self.layer_dims[i], self.layer_dims[i + 1], model_utils.get_activation_func(cfg_network['dyn_model_mlp']['activation'])))"""
             else:
                 modules.append(nn.Linear(self.layer_dims[i], self.layer_dims[i + 1]))
 
