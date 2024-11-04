@@ -68,7 +68,7 @@ params:
     filter_sigma_events: False
     learn_reward: False
     avantage_objective: False
-    imagined_batch_size: 64
+    imagined_batch_size: 0
 
     wandb_track: True
     wandb_project_name: neuro_diff_sim

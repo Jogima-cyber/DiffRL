@@ -341,7 +341,7 @@ class AntEnv(DFlexEnv):
             self.reset_buf = torch.where(self.obs_buf[:, 0] < self.termination_height, torch.ones_like(self.reset_buf), self.reset_buf)
         self.reset_buf = torch.where(self.progress_buf > self.episode_length - 1, torch.ones_like(self.reset_buf), self.reset_buf)
 
-    def diffRecalculateReward(self, obs, actions, offids = None):
+    def diffRecalculateReward(self, obs, actions, offids = None, imagined_trajs = None):
         up_reward = 0.1 * obs[:, 27]
         heading_reward = obs[:, 28]
         height_reward = obs[:, 0] - self.termination_height
