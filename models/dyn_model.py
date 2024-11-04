@@ -83,7 +83,7 @@ class StochSSM(nn.Module):
                 #modules.append(model_utils.get_activation_func(cfg_network['dyn_model_mlp']['activation']))
                 #modules.append(SimNorm(8))
                 modules.append(torch.nn.LayerNorm(self.layer_dims[i+1], eps=1e-03))
-            """if i < len(self.layer_dims) - 2:
+                """if i < len(self.layer_dims) - 2:
                 if i == 0:
                     modules.append(ResidualBlock(self.layer_dims[i], self.layer_dims[i + 1], SimNorm(8)))
                 else:
