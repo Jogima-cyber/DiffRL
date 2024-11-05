@@ -405,7 +405,7 @@ class HumanoidEnv(DFlexEnv):
     
         self.rew_buf[invalid_masks] = 0.
 
-    def diffRecalculateReward(self, obs, actions, offids = None):
+    def diffRecalculateReward(self, obs, actions, offids = None, imagined_trajs = None):
         up_reward = 0.1 * obs[:, 53]
         heading_reward = obs[:, 54]
 

@@ -18,7 +18,7 @@ params:
 
     dyn_model: StochSSM
     dyn_model_mlp:
-      units: [1792, 1792, 1024] # [1792, 1792]
+      units: [1792, 1792]
       activation: silu
       reward_head_units: [1792, 1792]
       num_bins: 101
@@ -63,7 +63,7 @@ params:
     dyn_udt: 256
     init_dyn_udt: 10000
     min_replay: 40000
-    dyn_pred_batch_size: 64 # 1024
+    dyn_pred_batch_size: 1024
     filter_sigma_events: False
     learn_reward: False
     imagined_batch_size: 0

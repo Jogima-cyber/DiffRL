@@ -311,7 +311,7 @@ class HopperEnv(DFlexEnv):
         if self.early_termination:
             self.reset_buf = torch.where(self.obs_buf[:, 0] < self.termination_height, torch.ones_like(self.reset_buf), self.reset_buf)
 
-    def diffRecalculateReward(self, obs, actions, offids = None):
+    def diffRecalculateReward(self, obs, actions, offids = None, imagined_trajs = None):
         height_diff = obs[:, 0] - (self.termination_height + self.termination_height_tolerance)
         height_reward = torch.clip(height_diff, -1.0, 0.3)
         height_reward = torch.where(height_reward < 0.0, -200.0 * height_reward * height_reward, height_reward)

@@ -297,7 +297,7 @@ class CheetahEnv(DFlexEnv):
         # reset agents
         self.reset_buf = torch.where(self.progress_buf > self.episode_length - 1, torch.ones_like(self.reset_buf), self.reset_buf)
 
-    def diffRecalculateReward(self, obs, actions, offids = None):
+    def diffRecalculateReward(self, obs, actions, offids = None, imagined_trajs = None):
         progress_reward = obs[:, 8]
 
         rew = progress_reward + torch.sum(actions ** 2, dim = -1) * self.action_penalty

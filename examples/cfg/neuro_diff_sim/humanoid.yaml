@@ -25,7 +25,7 @@ params:
       vmin: -10.0
       vmax: 10.0
       use_bins: True
-      recurrent: True
+      recurrent: False # True
       seq_len: 25 # 50
       hidden_size: 256
 
