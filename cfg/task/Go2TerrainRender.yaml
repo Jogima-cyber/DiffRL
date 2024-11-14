@@ -3,7 +3,7 @@ name: Go2TerrainRender
 
 video_save_path: 'video.mp4'
 physics_engine: "physx"
-test: False
+test: True
 horizon_length: 24
 max_epochs: 1000
 
