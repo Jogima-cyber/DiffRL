@@ -688,6 +688,10 @@ class DecoupledNeuroDiffSim:
         self.time_report = TimeReport()
 
     def fill_replay_buffer(self, deterministic = False):
+        ##################################
+        deterministic = True
+        ##################################
+
         filled_nb = 0
         self.p_hidden_in = None
         if self.dyn_recurrent:
@@ -737,6 +741,10 @@ class DecoupledNeuroDiffSim:
         print("Filling done")
 
     def compute_actor_loss(self, deterministic = False):
+        ##################################
+        deterministic = True
+        ##################################
+
         rew_acc = torch.zeros((self.steps_num + 1, self.num_envs + self.imagined_batch_size), dtype = torch.float32, device = self.device)
         gamma = torch.ones(self.num_envs + self.imagined_batch_size, dtype = torch.float32, device = self.device)
         next_values = torch.zeros((self.steps_num + 1, self.num_envs + self.imagined_batch_size), dtype = torch.float32, device = self.device)
@@ -810,7 +818,7 @@ class DecoupledNeuroDiffSim:
                 else:
                     actions = self.actor(self.env.full2partial_state(obs.clone()), deterministic = deterministic)
 
-            actions = actions.requires_grad_(True)
+            actions.requires_grad_(True)
             actions_to_optimize.append(actions)
 
             with torch.no_grad():
@@ -1146,23 +1154,84 @@ class DecoupledNeuroDiffSim:
         #actor_loss /= self.steps_num * self.num_envs * self.steps_num / 2
         actor_loss /= self.steps_num * (self.num_envs + self.imagined_batch_size)
         # Backpropagate the loss
-        actor_loss.backward()
+        #actor_loss.backward()
 
         # Update actions using SGD
-        learning_rate = 0.1  # Set your desired learning rate
+        learning_rate = 0.01  # Set your desired learning rate
 
-        with torch.no_grad():
+        """with torch.no_grad():
             for action in actions_to_optimize:
                 action -= learning_rate * action.grad
                 # Optionally, zero the gradients after the update
-                action.requires_grad = False
+                action.requires_grad = False"""
+
+        # Compute gradients w.r.t. actions
+        grad_actions = torch.autograd.grad(actor_loss, actions_to_optimize, create_graph=False)
+
+        # Update actions manually
+        with torch.no_grad():
+            for action, grad in zip(actions_to_optimize, grad_actions):
+                action -= learning_rate * grad
 
         for param in self.actor.parameters():
             param.requires_grad = True
 
-        predicted_actions = self.actor(self.obs_buf, deterministic = deterministic)
-        print(predicted_actions.shape, torch.stack(actions_to_optimize).shape)
-        exit(0)
+        #predicted_actions = self.actor(self.obs_buf, deterministic = deterministic)
+        #actor_loss = F.mse_loss(predicted_actions, torch.stack(actions_to_optimize).detach())
+
+        ##################################################################
+        ##################################################################
+        actions_tensor = torch.stack(actions_to_optimize).detach()
+        num_steps, num_envs, obs_dim = self.obs_buf.shape
+        _, _, action_dim = actions_tensor.shape
+        obs_flat = self.obs_buf.view(num_steps * num_envs, obs_dim)          # Shape: [N, obs_dim]
+        actions_flat = actions_tensor.reshape(num_steps * num_envs, action_dim)
+
+        num_epochs = 10  # Define the number of epochs
+        batch_size = 256  # Define your batch size
+        N = obs_flat.shape[0]
+
+        self.actor.train()  # Set the actor to training mode
+
+        for epoch in range(num_epochs):
+            epoch_loss = 0.0
+
+            # Shuffle the data at the beginning of each epoch
+            perm = torch.randperm(N)
+            obs_shuffled = obs_flat[perm]
+            actions_shuffled = actions_flat[perm]
+
+            # Loop over minibatches
+            for i in range(0, N, batch_size):
+                # Get the minibatch
+                batch_obs = obs_shuffled[i:i+batch_size]
+                batch_actions = actions_shuffled[i:i+batch_size]
+
+                # Zero the gradients
+                self.actor_optimizer.zero_grad()
+
+                # Forward pass: compute predicted actions
+                predicted_actions = self.actor(batch_obs, deterministic=deterministic)
+
+                # Compute the loss
+                actor_loss = 1e4 * F.mse_loss(predicted_actions, batch_actions)
+
+                # Backward pass: compute gradients
+                actor_loss.backward()
+
+                # Update the actor's parameters
+                self.actor_optimizer.step()
+
+                # Accumulate the loss for reporting
+                epoch_loss += actor_loss.item() * batch_obs.size(0)
+
+        # Compute average loss for the epoch
+        actor_loss = epoch_loss / (N * num_epochs)
+
+        # After training, you can set the actor back to evaluation mode if necessary
+        self.actor.eval()
+        ##################################################################
+        ##################################################################
 
         #dyn_loss /= self.steps_num * self.num_envs ###
         #actor_loss /= samples_used ##
@@ -1171,7 +1240,8 @@ class DecoupledNeuroDiffSim:
         if self.ret_rms is not None:
             actor_loss = actor_loss * torch.sqrt(ret_var + 1e-6)
 
-        self.actor_loss = actor_loss.detach().cpu().item()
+        ##self.actor_loss = actor_loss.detach().cpu().item()
+        self.actor_loss = actor_loss
         #self.dyn_loss = dyn_loss.detach().cpu().item() ###
 
         self.step_count += self.steps_num * self.num_envs
@@ -1452,7 +1522,7 @@ class DecoupledNeuroDiffSim:
             actor_loss = self.compute_actor_loss()
             self.time_report.end_timer("forward simulation")
 
-            self.time_report.start_timer("backward simulation")
+            """self.time_report.start_timer("backward simulation")
             self.actor_optimizer.zero_grad()
             actor_loss.backward()
             self.time_report.end_timer("backward simulation")
@@ -1466,7 +1536,12 @@ class DecoupledNeuroDiffSim:
                 # sanity check
                 if torch.isnan(self.grad_norm_before_clip): #or self.grad_norm_before_clip > 1000000.:
                     print('NaN gradient')
-                    raise ValueError
+                    raise ValueError"""
+
+            #################################
+            self.grad_norm_before_clip = actor_loss
+            self.grad_norm_after_clip = 0.
+            #################################
 
             self.time_report.end_timer("compute actor loss")
 
@@ -1495,7 +1570,8 @@ class DecoupledNeuroDiffSim:
 
             # train actor
             self.time_report.start_timer("actor training")
-            actor_loss = self.actor_optimizer.step(actor_closure)
+            #actor_loss = self.actor_optimizer.step(actor_closure)
+            actor_loss = actor_closure()
             self.time_report.end_timer("actor training")
 
             # train critic
