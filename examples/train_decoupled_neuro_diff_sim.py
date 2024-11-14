@@ -58,13 +58,13 @@ def get_args(): # TODO: delve into the arguments
     custom_parameters = [
         {"name": "--test", "action": "store_true", "default": False,
             "help": "Run trained policy, no training"},
-        {"name": "--cfg", "type": str, "default": "./cfg/neuro_diff_sim/ant.yaml",
+        {"name": "--cfg", "type": str, "default": "./cfg/decoupled_neuro_diff_sim/ant.yaml",
             "help": "Configuration file for training/playing"},
         {"name": "--play", "action": "store_true", "default": False,
             "help": "Run trained policy, the same as test"},
         {"name": "--checkpoint", "type": str, "default": "Base",
             "help": "Path to the saved weights"},
-        {"name": "--logdir", "type": str, "default": "logs/tmp/neuro_diff_sim/"},
+        {"name": "--logdir", "type": str, "default": "logs/tmp/decoupled_neuro_diff_sim/"},
         {"name": "--save-interval", "type": int, "default": 0},
         {"name": "--no-time-stamp", "action": "store_true", "default": False,
             "help": "whether not add time stamp at the log path"},
@@ -112,7 +112,7 @@ if __name__ == '__main__':
     for key in vargs.keys():
         cfg_train["params"]["general"][key] = vargs[key]
 
-    traj_optimizer = neuro_diff_sim.NeuroDiffSim(cfg_train)
+    traj_optimizer = decoupled_neuro_diff_sim.DecoupledNeuroDiffSim(cfg_train)
 
     if args.train:
         traj_optimizer.train()

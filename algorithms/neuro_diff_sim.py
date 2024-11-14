@@ -960,6 +960,7 @@ class NeuroDiffSim:
                 #if (rew != recalculated_rew).any() and not self.unroll_img:
                 if not torch.allclose(rew[:self.num_envs], recalculated_rew[:self.num_envs], rtol=1e-05, atol=1e-08, equal_nan=False) and not self.unroll_img: # and self.env_type == "dflex":
                     print(i, (rew[:self.num_envs] != recalculated_rew[:self.num_envs]), rew[:self.num_envs], recalculated_rew[:self.num_envs], (rew[:self.num_envs] - recalculated_rew[:self.num_envs]))
+                    print((rew[:self.num_envs] != recalculated_rew[:self.num_envs]).sum(), done.sum(), (done == (rew[:self.num_envs] != recalculated_rew[:self.num_envs])).sum())
                     print('recalculated reward error')
                     raise ValueError
                 rew = recalculated_rew.clone()
