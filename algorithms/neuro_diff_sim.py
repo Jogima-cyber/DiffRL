@@ -779,6 +779,7 @@ class NeuroDiffSim:
 
         if self.dyn_recurrent:
             self.p_hidden_in = self.p_hidden_in.detach()
+        last_actions = torch.zeros((self.steps_num + 1, self.num_envs, self.num_actions), dtype=torch.float32, device=self.device)
         for i in range(self.steps_num):
             # collect data for critic training
             with torch.no_grad():
@@ -804,6 +805,7 @@ class NeuroDiffSim:
                     actions = self.actor(obs, deterministic = deterministic)
                 else:
                     actions = self.actor(self.env.full2partial_state(obs.clone()), deterministic = deterministic)
+            last_actions[i + 1] = actions.clone()
 
             with torch.no_grad():
                 if self.avantage_objective:
@@ -848,6 +850,7 @@ class NeuroDiffSim:
                         if(done.any()):
                             done_idx = torch.argwhere(done).squeeze()
                             real_next_obs[done_idx] = extra_info['obs_before_reset'][done_idx]
+                            last_actions[i + 1, done_idx] = 0.
 
                     if self.imagined_batch_size:
                         if self.dyn_recurrent:
@@ -956,7 +959,7 @@ class NeuroDiffSim:
                 recalculated_rew = models.dyn_model.RewardsFunction.apply(raw_obs, actions, rew.clone(), self.dyn_model, obs_rms)
             else:
                 #real_next_obs = models.dyn_model.GradientAnalysorFunction.apply(real_next_obs.clone())
-                recalculated_rew = self.env.diffRecalculateReward(real_next_obs, torch.tanh(actions), imagined_trajs = self.imagined_batch_size)
+                recalculated_rew = self.env.diffRecalculateReward(real_next_obs, torch.tanh(actions), torch.tanh(last_actions[i]), imagined_trajs = self.imagined_batch_size)
                 #if (rew != recalculated_rew).any() and not self.unroll_img:
                 if not torch.allclose(rew[:self.num_envs], recalculated_rew[:self.num_envs], rtol=1e-05, atol=1e-08, equal_nan=False) and not self.unroll_img: # and self.env_type == "dflex":
                     print(i, (rew[:self.num_envs] != recalculated_rew[:self.num_envs]), rew[:self.num_envs], recalculated_rew[:self.num_envs], (rew[:self.num_envs] - recalculated_rew[:self.num_envs]))
