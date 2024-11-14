@@ -39,10 +39,12 @@ from omegaconf import DictConfig
 from isaacgymenvs.utils.reformat import omegaconf_to_dict
 from tasks.ant_render import AntRender
 from tasks.anymal_render import AnymalRender
+from tasks.go2_terrain_render import Go2TerrainRender
 
 isaacgym_task_map = {
     "AntRender": AntRender,
     "AnymalRender": AnymalRender,
+    "Go2TerrainRender": Go2TerrainRender
 }
 
 def make(
