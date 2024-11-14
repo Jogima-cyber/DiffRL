@@ -707,13 +707,16 @@ class NeuroDiffSim:
             while filled_nb < self.min_replay:
                 if self.env_type == "dflex":
                     actions = self.actor(obs, deterministic = deterministic)
+                    self.last_action_recorded = actions.clone()
                     next_obs, rew, done, extra_info = self.env.neurodiff_step(torch.tanh(actions))
                     real_next_obs = next_obs.clone()
                     if done.any():
                         done_idx = torch.argwhere(done).squeeze()
                         real_next_obs[done_idx] = extra_info['obs_before_reset'][done_idx]
+                        self.last_action_recorded[done_idx] = 0.
                 else:
                     actions = self.actor(self.env.full2partial_state(obs), deterministic = deterministic)
+                    self.last_action_recorded = actions.clone()
                     next_obs, rew, done, extra_info = self.env.step(torch.tanh(actions))
                     done = extra_info['dones']
                     next_obs = self.env.dyn_obs_buf.clone()
@@ -721,8 +724,8 @@ class NeuroDiffSim:
                     if done.any():
                         done_idx = torch.argwhere(done).squeeze()
                         real_next_obs[done_idx] = extra_info['obs_before_reset'][done_idx]
+                        self.last_action_recorded[done_idx] = 0.
 
-                self.last_action_recorded = actions.clone()
                 if self.dyn_recurrent:
                     self.dyn_rb.add(raw_obs.detach(), real_next_obs.detach(), actions.detach(), rew.detach(), done.float(), torch.zeros((1, self.num_envs, self.dyn_hidden_size), device=self.device), done.float())
                 else:
@@ -854,6 +857,7 @@ class NeuroDiffSim:
                             done_idx = torch.argwhere(done).squeeze()
                             real_next_obs[done_idx] = extra_info['obs_before_reset'][done_idx]
                             last_actions[i + 1, done_idx] = 0.
+                            self.last_action_recorded[done_idx] = 0.
 
                     if self.imagined_batch_size:
                         if self.dyn_recurrent:
@@ -967,6 +971,7 @@ class NeuroDiffSim:
                 if not torch.allclose(rew[:self.num_envs], recalculated_rew[:self.num_envs], rtol=1e-05, atol=1e-08, equal_nan=False) and not self.unroll_img: # and self.env_type == "dflex":
                     print(i, (rew[:self.num_envs] != recalculated_rew[:self.num_envs]), rew[:self.num_envs], recalculated_rew[:self.num_envs], (rew[:self.num_envs] - recalculated_rew[:self.num_envs]))
                     print((rew[:self.num_envs] != recalculated_rew[:self.num_envs]).sum(), done.sum(), (done == (rew[:self.num_envs] != recalculated_rew[:self.num_envs])).sum())
+
                     print((self.env.reward_actions != (torch.tanh(actions) * 2)).any(-1).sum(), (self.env.reward_last_actions != (torch.tanh(last_actions[i]) * 2)).any(-1).sum())
                     print((self.env.diff_reward_rew_action_rate != self.env.reward_rew_action_rate).sum())
                     print('recalculated reward error')
