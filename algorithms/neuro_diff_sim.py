@@ -968,7 +968,9 @@ class NeuroDiffSim:
                     print(i, (rew[:self.num_envs] != recalculated_rew[:self.num_envs]), rew[:self.num_envs], recalculated_rew[:self.num_envs], (rew[:self.num_envs] - recalculated_rew[:self.num_envs]))
                     print((rew[:self.num_envs] != recalculated_rew[:self.num_envs]).sum(), done.sum(), (done == (rew[:self.num_envs] != recalculated_rew[:self.num_envs])).sum())
                     print((self.env.reward_actions != (torch.tanh(actions) * 2)).any(-1).sum(), (self.env.reward_last_actions != (torch.tanh(last_actions[i]) * 2)).any(-1).sum())
+                    print((self.env.diff_reward_rew_action_rate != self.env.reward_rew_action_rate).sum())
                     print('recalculated reward error')
+
                     raise ValueError
                 rew = recalculated_rew.clone()
             #print(rew.mean())
