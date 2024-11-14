@@ -3,6 +3,9 @@ name: Go2TerrainRender
 
 video_save_path: 'video.mp4'
 physics_engine: "physx"
+test: False
+horizon_length: 24
+max_epochs: 1000
 
 env:
   numEnvs: ${resolve_default:4096,${...num_envs}}
@@ -57,9 +60,9 @@ env:
 
   randomCommandVelocityRanges:
     # train
-    linear_x: [0.4, 0.4] # [-0.3, 1.0] # min max [m/s]
-    linear_y: [-0.7, 0.7] # min max [m/s]
-    yaw: [-0.78, 0.78] # min max [rad/s]
+    linear_x: [-0.6, 0.6] # min max [m/s]
+    linear_y: [-0.6, 0.6] # min max [m/s]
+    yaw: [-1.0, 1.0] # min max [rad/s]
 
   control:
     useActuatorNet: false
@@ -91,8 +94,9 @@ env:
     footName: foot
     shinName: thigh
     kneeName: calf
-    terminate_after_contacts_on: ["base", "Head_lower", "Head_upper", "FL_calf", "FR_calf", "RL_calf", "RR_calf", "FL_thigh", "FR_thigh", "RL_thigh", "RR_thigh"]
-    #terminate_after_contacts_on: ["base", "Head_lower", "Head_upper"]
+    #terminate_after_contacts_on: ["base", "Head_lower", "Head_upper", "FL_calf", "FR_calf", "RL_calf", "RR_calf", "FL_thigh", "FR_thigh", "RL_thigh", "RR_thigh"]
+    #terminate_after_contacts_on: ["base", "Head_lower", "Head_upper", "FL_calf", "FR_calf", "RL_calf", "RR_calf"]
+    terminate_after_contacts_on: ["base", "Head_lower", "Head_upper"]
     collapseFixedJoints: True
     fixBaseLink: false
     defaultDofDriveMode: 4 # see GymDofDriveModeFlags (0 is none, 1 is pos tgt, 2 is vel tgt, 4 effort)
@@ -122,7 +126,7 @@ env:
     dofVelLimitRewardScale: 0
     footTwoContactRewardScale: 0.0 # 1.0 (as reward)
     hipRewardScale: -0.0
-    raibertHeuristic: 0. # -10.0
+    raibertHeuristic: -10.0
     standStill: 0. # -2.
 
     # Misc quantities for rewards
@@ -134,8 +138,8 @@ env:
     enableConstraints: "cat"  # "none", "cat"
     constraints_CaT:
       survivalBonus: 0.0
-      feetAirTimeConstraint: 0.35
-      feetMaxAirTimeConstraint: 0.25
+      feetAirTimeConstraint: 0.25 # 0.15 # 0.20
+      feetMaxAirTimeConstraint: 0.20 # 0.25
       tauConstraint: 0.95
       minPConstraint: 0.0
       softPConstraint: 0.25
@@ -145,32 +149,37 @@ env:
 
     limits:
       torque: 35.0 # 3.0
-      acc: 800.0
+      jerk: 8000.0
+      acc: 300.0
       vel: 16.0
-      action_rate: 80.0
+      action_rate: 120.0 # 100
       base_orientation: 0.1
-      foot_contact_force: 50.0
-      HFE: 1.3 # needs modif
-      HAA: 0.2 # needs modif
+      foot_contact_force: 100.0 # 50.0
+      foot_contact_vertical_force: 80.0
+      foot_contact_force_rate: 60.0
+      HFE: 1. # 1.3
+      HAA: 0.1 # 0.3
       base_height_max: 100.0
       base_height_min: 0.05
+      base_height_min_soft: 0.25
 
     # Other
     flatTerrainThreshold: 0.001
-    vel_deadzone: 0.2 # 0.1
+    vel_deadzone: 0.2
     base_height_target: 0.245
     gait_period: 0.4
 
     # observations
     observe:
-      base_lin_vel: false
+      base_lin_vel: true
       base_ang_vel: true
       commands: true
       misc: true
       heights: false
       phases: false
       imu: false
-      clock_inputs: false
+      clock_inputs: true
+      foot_positions: true
 
     measured_points_step: 0.08
     measured_points_x: [-3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -186,18 +195,18 @@ env:
     imuAccelerationScale: 0.1
 
     # noise
-    addNoise: true
+    addNoise: False # true
     noiseLevel: 1.0 # scales other values
     dofPositionNoise: 0.01
-    dofVelocityNoise: 0.2
-    linearVelocityNoise: 0.0
-    angularVelocityNoise: 0.001
+    dofVelocityNoise: 0.2 # 1.5 # 0.2
+    linearVelocityNoise: 0.0 # 0.1 # 0.0
+    angularVelocityNoise: 0.001 # 0.2 # 0.001
     gravityNoise: 0.05
     heightMeasurementNoise: 0.01
 
     # friction randomization
     randomizeFriction: true
-    frictionRange: [0.5, 1.25]
+    frictionRange: [0.5, 1.25] # [0.1, 3.0]
     randomizeMotorFriction: true
     mu_vRange: [0.0, 0.3] #
     FsRange: [0.0, 2.5] #
@@ -208,7 +217,7 @@ env:
 
     # restitution randomization
     randomizeRestitution: false
-    restitutionRange: [0.0, 1.0]
+    restitutionRange: [0.0, 0.4] #
 
     # com randomization
     randomizeComDisplacement: false
@@ -227,8 +236,6 @@ env:
 
     # episode length in seconds
     episodeLength_s: 10
-
-
 
   # viewer cam:
   viewer:
