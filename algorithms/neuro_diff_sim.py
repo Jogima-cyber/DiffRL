@@ -722,6 +722,7 @@ class NeuroDiffSim:
                         done_idx = torch.argwhere(done).squeeze()
                         real_next_obs[done_idx] = extra_info['obs_before_reset'][done_idx]
 
+                self.last_action_recorded = actions.clone()
                 if self.dyn_recurrent:
                     self.dyn_rb.add(raw_obs.detach(), real_next_obs.detach(), actions.detach(), rew.detach(), done.float(), torch.zeros((1, self.num_envs, self.dyn_hidden_size), device=self.device), done.float())
                 else:
@@ -780,6 +781,7 @@ class NeuroDiffSim:
         if self.dyn_recurrent:
             self.p_hidden_in = self.p_hidden_in.detach()
         last_actions = torch.zeros((self.steps_num + 1, self.num_envs, self.num_actions), dtype=torch.float32, device=self.device)
+        last_actions[0] = self.last_action_recorded
         for i in range(self.steps_num):
             # collect data for critic training
             with torch.no_grad():
@@ -806,6 +808,7 @@ class NeuroDiffSim:
                 else:
                     actions = self.actor(self.env.full2partial_state(obs.clone()), deterministic = deterministic)
             last_actions[i + 1] = actions.clone()
+            self.last_action_recorded = actions.clone()
 
             with torch.no_grad():
                 if self.avantage_objective:
