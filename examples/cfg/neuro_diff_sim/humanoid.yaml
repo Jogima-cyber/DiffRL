@@ -54,7 +54,7 @@ params:
     dyn_udt: 256 # 256
     init_dyn_udt: 1000 # 10000 # 1000
     min_replay: 4000 # 40000 # 4000
-    dyn_pred_batch_size: 64 # 1024
+    dyn_pred_batch_size: 1024
     filter_sigma_events: True
     learn_reward: False
 

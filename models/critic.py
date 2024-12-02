@@ -18,12 +18,20 @@ class CriticMLP(nn.Module):
 
         self.device = device
         self.dyn_recurrent = cfg_network["dyn_model_mlp"].get("recurrent", False)
+        self.act_recurrent = cfg_network["actor_mlp"].get("recurrent", False)
+        self.hidden_to_value = cfg_network["dyn_model_mlp"].get("hidden_to_value", True)
 
-        if self.dyn_recurrent:
+        self.obs_total_size = obs_dim
+
+        if self.dyn_recurrent and self.hidden_to_value:
             self.hidden_size = int(cfg_network["dyn_model_mlp"].get("hidden_size", 128))
-            self.layer_dims = [self.hidden_size + obs_dim] + cfg_network['critic_mlp']['units'] + [1]
-        else:
-            self.layer_dims = [obs_dim] + cfg_network['critic_mlp']['units'] + [1]
+            self.obs_total_size += self.hidden_size
+
+        if self.act_recurrent:
+            self.act_hidden_size = int(cfg_network["actor_mlp"].get("hidden_size", 128))
+            self.obs_total_size += self.act_hidden_size
+
+        self.layer_dims = [self.obs_total_size] + cfg_network['critic_mlp']['units'] + [1]
 
         init_ = lambda m: model_utils.init(m, nn.init.orthogonal_, lambda x: nn.init.
                         constant_(x, 0), np.sqrt(2))

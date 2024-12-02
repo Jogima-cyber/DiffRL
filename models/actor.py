@@ -52,21 +52,38 @@ class ActorStochasticMLP(nn.Module):
 
         self.device = device
 
-        self.layer_dims = [obs_dim] + cfg_network['actor_mlp']['units'] + [action_dim]
+        self.recurrent = cfg_network["actor_mlp"].get("recurrent", False)
+        self.separate = cfg_network["critic_mlp"].get("separate", True)
+
+        if self.recurrent:
+            self.hidden_size = int(cfg_network["actor_mlp"].get("hidden_size", 128))
+            self.gru = nn.GRU(obs_dim, self.hidden_size, batch_first=True).to(device)
+            if self.separate:
+                self.layer_dims = [obs_dim + self.hidden_size] + cfg_network['actor_mlp']['units'] + [action_dim]
+            else:
+                self.layer_dims = [obs_dim + self.hidden_size] + cfg_network['actor_mlp']['units']
+        else:
+            if self.separate:
+                self.layer_dims = [obs_dim] + cfg_network['actor_mlp']['units'] + [action_dim]
+            else:
+                self.layer_dims = [obs_dim] + cfg_network['actor_mlp']['units']
 
         init_ = lambda m: model_utils.init(m, nn.init.orthogonal_, lambda x: nn.init.
                         constant_(x, 0), np.sqrt(2))
-        
+
         modules = []
         for i in range(len(self.layer_dims) - 1):
             modules.append(nn.Linear(self.layer_dims[i], self.layer_dims[i + 1]))
-            if i < len(self.layer_dims) - 2:
+            if i < len(self.layer_dims) - 2 or not self.separate:
                 modules.append(model_utils.get_activation_func(cfg_network['actor_mlp']['activation']))
                 modules.append(torch.nn.LayerNorm(self.layer_dims[i+1]))
             else:
                 modules.append(model_utils.get_activation_func('identity'))
 
         self.mu_net = nn.Sequential(*modules).to(device)
+        if not self.separate:
+            self.mu_head = nn.Linear(self.layer_dims[-1], action_dim).to(device)
+            self.critic_head = nn.Linear(self.layer_dims[-1], 1).to(device)
 
         logstd = cfg_network.get('actor_logstd_init', -1.0)
 
@@ -86,19 +103,36 @@ class ActorStochasticMLP(nn.Module):
     def get_logstd(self):
         return self.logstd
 
-    def forward(self, obs, deterministic = False):
+    def value(self, obs):
+        out = self.mu_net(obs[..., :self.obs_dim])
+        return self.critic_head(out)
+
+    def forward(self, obs, deterministic = False, l = None):
         #self.clamp_std()
-        mu = self.mu_net(obs)
+        x = obs
+        time_latent = l
+        if self.recurrent:
+            out, time_latent = self.gru(obs.unsqueeze(1), l)
+            x = torch.cat([obs.unsqueeze(1), out], dim=-1)
+        mu = self.mu_net(x)
+        if not self.separate:
+            mu = self.mu_head(mu)
 
         if deterministic:
-            return mu
+            if self.recurrent:
+                return mu.squeeze(1), time_latent
+            else:
+                return mu, time_latent
         else:
             std = self.logstd.exp() # (num_actions)
             # eps = torch.randn((*obs.shape[:-1], std.shape[-1])).to(self.device)
             # sample = mu + eps * std
             dist = Normal(mu, std)
             sample = dist.rsample()
-            return sample
+            if self.recurrent:
+                return sample.squeeze(1), time_latent
+            else:
+                return sample, time_latent
 
     def forward_with_dist(self, obs, deterministic = False):
         mu = self.mu_net(obs)

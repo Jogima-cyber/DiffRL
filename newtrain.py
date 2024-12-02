@@ -50,7 +50,7 @@ class ExtractObsWrapper(gym.ObservationWrapper):
 
 def eval(cfg: DictConfig, envs):
     checkpoint = cfg["checkpoint"]
-    actor, _, _, obs_rms, _ = torch.load(checkpoint)
+    actor, _, _, obs_rms, _, _ = torch.load(checkpoint)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -60,7 +60,9 @@ def eval(cfg: DictConfig, envs):
 
     for i in range(3000):
         with torch.no_grad():
-            actions = actor(obs_rms.normalize(obs))
+            actions = torch.tanh(actor(obs_rms.normalize(obs)))
+        if hasattr(envs, "action_scale_prime"):
+            actions = actions * envs.action_scale_prime + envs.action_bias
         next_obs, rewards, terminations, infos = envs.step(actions)
         obs = next_obs
 

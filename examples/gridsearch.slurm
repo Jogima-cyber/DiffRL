@@ -8,7 +8,7 @@
 #SBATCH --time=5:00:00              # maximum execution time (HH:MM:SS)
 #SBATCH --output=logs/logs_%j.out # output file name
 #SBATCH --error=logs/logs_%j.err  # error file name
-#SBATCH --array=1-5
+#SBATCH --array=1-20
 
 #declare -A hyperparameters=(
 #     ["seed"]="20 30 40 50 60
@@ -82,26 +82,26 @@
 #     ["cfg"]="./cfg/neuro_diff_sim/ant.yaml ./cfg/neuro_diff_sim/ant.yaml ./cfg/neuro_diff_sim/ant.yaml ./cfg/neuro_diff_sim/ant.yaml ./cfg/neuro_diff_sim/ant.yaml
 # ./cfg/neuro_diff_sim/humanoid.yaml ./cfg/neuro_diff_sim/humanoid.yaml ./cfg/neuro_diff_sim/humanoid.yaml ./cfg/neuro_diff_sim/humanoid.yaml ./cfg/neuro_diff_sim/humanoid.yaml"
 #)
-declare -A hyperparameters=(
-     ["seed"]="20 30 40 50 60"
-     ["logdir"]="./logs/Ant/neuro_diff_sim/20 ./logs/Ant/neuro_diff_sim/30 ./logs/Ant/neuro_diff_sim/40 ./logs/Ant/neuro_diff_sim/50 ./logs/Ant/neuro_diff_sim/60"
-     ["cfg"]="./cfg/neuro_diff_sim/ant.yaml ./cfg/neuro_diff_sim/ant.yaml ./cfg/neuro_diff_sim/ant.yaml ./cfg/neuro_diff_sim/ant.yaml ./cfg/neuro_diff_sim/ant.yaml"
-)
-
 #declare -A hyperparameters=(
-#     ["seed"]="20 30 40 50 60
-# 20 30 40 50 60
-# 20 30 40 50 60
-# 20 30 40 50 60"
-#     ["logdir"]="./logs/Hopper/neuro_diff_sim/20 ./logs/Hopper/neuro_diff_sim/30 ./logs/Hopper/neuro_diff_sim/40 ./logs/Hopper/neuro_diff_sim/50 ./logs/Hopper/neuro_diff_sim/60
-# ./logs/Cheetah/neuro_diff_sim/20 ./logs/Cheetah/neuro_diff_sim/30 ./logs/Cheetah/neuro_diff_sim/40 ./logs/Cheetah/neuro_diff_sim/50 ./logs/Cheetah/neuro_diff_sim/60
-# ./logs/Humanoid/neuro_diff_sim/20 ./logs/Humanoid/neuro_diff_sim/30 ./logs/Humanoid/neuro_diff_sim/40 ./logs/Humanoid/neuro_diff_sim/50 ./logs/Humanoid/neuro_diff_sim/60
-# ./logs/SNUHumanoid/neuro_diff_sim/20 ./logs/SNUHumanoid/neuro_diff_sim/30 ./logs/SNUHumanoid/neuro_diff_sim/40 ./logs/SNUHumanoid/neuro_diff_sim/50 ./logs/SNUHumanoid/neuro_diff_sim/60"
-#     ["cfg"]="./cfg/neuro_diff_sim/hopper.yaml ./cfg/neuro_diff_sim/hopper.yaml ./cfg/neuro_diff_sim/hopper.yaml ./cfg/neuro_diff_sim/hopper.yaml ./cfg/neuro_diff_sim/hopper.yaml
-# ./cfg/neuro_diff_sim/cheetah.yaml ./cfg/neuro_diff_sim/cheetah.yaml ./cfg/neuro_diff_sim/cheetah.yaml ./cfg/neuro_diff_sim/cheetah.yaml ./cfg/neuro_diff_sim/cheetah.yaml
-# ./cfg/neuro_diff_sim/humanoid.yaml ./cfg/neuro_diff_sim/humanoid.yaml ./cfg/neuro_diff_sim/humanoid.yaml ./cfg/neuro_diff_sim/humanoid.yaml ./cfg/neuro_diff_sim/humanoid.yaml
-# ./cfg/neuro_diff_sim/snu_humanoid.yaml ./cfg/neuro_diff_sim/snu_humanoid.yaml ./cfg/neuro_diff_sim/snu_humanoid.yaml ./cfg/neuro_diff_sim/snu_humanoid.yaml ./cfg/neuro_diff_sim/snu_humanoid.yaml"
+#     ["seed"]="20 30 40 50 60"
+#     ["logdir"]="./logs/Ant/neuro_diff_sim/20 ./logs/Ant/neuro_diff_sim/30 ./logs/Ant/neuro_diff_sim/40 ./logs/Ant/neuro_diff_sim/50 ./logs/Ant/neuro_diff_sim/60"
+#     ["cfg"]="./cfg/neuro_diff_sim/ant.yaml ./cfg/neuro_diff_sim/ant.yaml ./cfg/neuro_diff_sim/ant.yaml ./cfg/neuro_diff_sim/ant.yaml ./cfg/neuro_diff_sim/ant.yaml"
 #)
+
+declare -A hyperparameters=(
+     ["seed"]="20 30 40 50 60
+ 20 30 40 50 60
+ 20 30 40 50 60
+ 20 30 40 50 60"
+     ["logdir"]="./logs/Hopper/neuro_diff_sim/20 ./logs/Hopper/neuro_diff_sim/30 ./logs/Hopper/neuro_diff_sim/40 ./logs/Hopper/neuro_diff_sim/50 ./logs/Hopper/neuro_diff_sim/60
+ ./logs/Cheetah/neuro_diff_sim/20 ./logs/Cheetah/neuro_diff_sim/30 ./logs/Cheetah/neuro_diff_sim/40 ./logs/Cheetah/neuro_diff_sim/50 ./logs/Cheetah/neuro_diff_sim/60
+ ./logs/Humanoid/neuro_diff_sim/20 ./logs/Humanoid/neuro_diff_sim/30 ./logs/Humanoid/neuro_diff_sim/40 ./logs/Humanoid/neuro_diff_sim/50 ./logs/Humanoid/neuro_diff_sim/60
+ ./logs/SNUHumanoid/neuro_diff_sim/20 ./logs/SNUHumanoid/neuro_diff_sim/30 ./logs/SNUHumanoid/neuro_diff_sim/40 ./logs/SNUHumanoid/neuro_diff_sim/50 ./logs/SNUHumanoid/neuro_diff_sim/60"
+     ["cfg"]="./cfg/neuro_diff_sim/hopper.yaml ./cfg/neuro_diff_sim/hopper.yaml ./cfg/neuro_diff_sim/hopper.yaml ./cfg/neuro_diff_sim/hopper.yaml ./cfg/neuro_diff_sim/hopper.yaml
+ ./cfg/neuro_diff_sim/cheetah.yaml ./cfg/neuro_diff_sim/cheetah.yaml ./cfg/neuro_diff_sim/cheetah.yaml ./cfg/neuro_diff_sim/cheetah.yaml ./cfg/neuro_diff_sim/cheetah.yaml
+ ./cfg/neuro_diff_sim/humanoid.yaml ./cfg/neuro_diff_sim/humanoid.yaml ./cfg/neuro_diff_sim/humanoid.yaml ./cfg/neuro_diff_sim/humanoid.yaml ./cfg/neuro_diff_sim/humanoid.yaml
+ ./cfg/neuro_diff_sim/snu_humanoid.yaml ./cfg/neuro_diff_sim/snu_humanoid.yaml ./cfg/neuro_diff_sim/snu_humanoid.yaml ./cfg/neuro_diff_sim/snu_humanoid.yaml ./cfg/neuro_diff_sim/snu_humanoid.yaml"
+)
 
 #declare -A hyperparameters=(
 #     ["seed"]="20 30 40 50 60"
@@ -230,7 +230,7 @@ cd examples
 
 # Dyna
 #python train_neuro_diff_sim.py --exp_name neuro_diff_sim_2_dyna $hyperparam_args
-python train_neuro_diff_sim.py --exp_name neuro_diff_sim_2_CONTROL_03nov $hyperparam_args
+python train_neuro_diff_sim.py --exp_name neuro_diff_sim_2_CONTROL_04nov $hyperparam_args
 ######
 
 #python train_rl.py --exp_name ppo $hyperparam_args --env_type isaac_gym

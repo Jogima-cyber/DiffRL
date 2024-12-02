@@ -60,7 +60,7 @@ env:
 
   randomCommandVelocityRanges:
     # train
-    linear_x: [-0.6, 0.6] # min max [m/s]
+    linear_x: [-0.6, 0.6] # [0.0, 0.0] # [-0.6, 0.6] # min max [m/s]
     linear_y: [-0.6, 0.6] # min max [m/s]
     yaw: [-1.0, 1.0] # min max [rad/s]
 
@@ -90,6 +90,7 @@ env:
 
   urdfAsset:
     file: "resources/robots/go2/urdf/go2.urdf"
+    action_bounds_file: "resources/robots/go2/action_bounds_dummy.pt"
     baseName: base
     footName: foot
     shinName: thigh
@@ -128,6 +129,10 @@ env:
     hipRewardScale: -0.0
     raibertHeuristic: -10.0
     standStill: 0. # -2.
+    dof_vel: -0.0001
+    feetClearance: 0.0
+    trackingContactsShapedForce: 4.0
+    trackingContactsShapedVel: 4.0
 
     # Misc quantities for rewards
     linearVelocityXYRewardDelta: 0.25
@@ -178,8 +183,14 @@ env:
       heights: false
       phases: false
       imu: false
+      feet_swing_time: false
       clock_inputs: true
-      foot_positions: true
+      torques: false
+      foot_positions: false
+      foot_forces: true
+      base_quat: true
+      feet_heights: false
+      base_z: true
 
     measured_points_step: 0.08
     measured_points_x: [-3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -193,6 +204,8 @@ env:
     dofVelocityScale: 0.05
     heightMeasurementScale: 5.0
     imuAccelerationScale: 0.1
+    torquesScale: 0.01
+    footForcesScale: 1.
 
     # noise
     addNoise: False # true
