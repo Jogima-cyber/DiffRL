@@ -30,6 +30,9 @@ params:
     name: df_hopper_neuro_diff_sim
     actor_learning_rate: 2e-3 # 5e-4 # 2e-3 # adam
     critic_learning_rate: 2e-4 # adam
+
+    train_value_function: True
+
     dyn_model_learning_rate: 2e-3 # adam
     lr_schedule: linear # ['constant', 'linear']
     target_critic_alpha: 0.2 

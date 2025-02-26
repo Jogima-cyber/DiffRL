@@ -12,7 +12,6 @@ sys.path.append(project_dir)
 
 import argparse
 
-#import envs
 import os
 import sys
 import yaml
@@ -21,6 +20,7 @@ import numpy as np
 import copy
 
 def create_dflex_env(**kwargs):
+    import envs
     env_fn = getattr(envs, cfg_train["params"]["diff_env"]["name"])
 
     env = env_fn(num_envs=cfg_train["params"]["config"]["num_actors"], \

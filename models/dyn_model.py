@@ -146,6 +146,11 @@ class StochSSM(nn.Module):
         rew = self.reward_model(x)
         return self.almost_two_hot_inv(rew)
 
+    def raw_reward(self, s, a):
+        x = torch.cat([s, a], dim=-1)
+        rew = self.reward_model(x)
+        return rew
+
     def almost_two_hot_inv(self, x):
         """Converts a batch of soft two-hot encoded vectors to scalars."""
         if self.num_bins == 0 or self.num_bins == None:
@@ -415,7 +420,7 @@ class RewardsFunction(Function):
 
         # Compute the gradient of the dynamics model with respect to action and state
         with torch.enable_grad():
-            reward_pred = model.reward(obs_rms.normalize(state), torch.tanh(action)) # get rid of tanh?
+            reward_pred = model.reward(obs_rms.normalize(state), torch.tanh(action)).squeeze(-1) # get rid of tanh?
 
             if state.requires_grad:
                 grad_state, = torch.autograd.grad(
@@ -493,7 +498,10 @@ class DynamicsFunctionPMO(Function):
 
         # Compute the gradient of the dynamics model with respect to action and state
         with torch.enable_grad():
-            next_state_pred = model(obs_rms.normalize(state), torch.tanh(action))[0] + state # get rid of tanh?
+            if obs_rms is not None:
+                next_state_pred = model(obs_rms.normalize(state), torch.tanh(action))[0] + state # get rid of tanh?
+            else:
+                next_state_pred = model(state, torch.tanh(action))[0] + state
 
             if state.requires_grad:
                 grad_state, = torch.autograd.grad(

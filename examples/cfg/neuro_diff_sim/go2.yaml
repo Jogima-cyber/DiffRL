@@ -21,6 +21,7 @@ params:
       units: [256, 128, 64]
       activation: elu
       separate: True
+      asymetrical: True
 
     dyn_model: StochSSM
     dyn_model_mlp:
@@ -29,7 +30,7 @@ params:
       recurrent: True
       seq_len: 25 # 50
       hidden_size: 256
-      hidden_to_value: False
+      hidden_to_value: True
 
   config:
     name: df_go2_neuro_diff_sim
@@ -37,7 +38,9 @@ params:
     critic_learning_rate: 5e-4 # 2e-4 # adam
     dyn_model_learning_rate: 3e-4 # adam
 
-    train_value_function: True
+    train_value_function: False
+    no_stoch_dyn_model: False
+    no_stoch_act_model: True
 
     lr_schedule: linear # ['constant', 'linear']
     target_critic_alpha: 0.2
@@ -49,15 +52,19 @@ params:
     lambda: 0.95
     num_batch: 4 # 8
     gamma: 0.99
-    betas: [0.7, 0.95] # adam
-    max_epochs: 2000 # 4000 # 1250
+    betas: [0.9, 0.999] # [0.7, 0.95] # adam
+    max_epochs: 1000 # 16000 # 2000 # 1000
+
     steps_num: 16
+    steps_num_schedule: False
+    steps_num_start: 14
+
     grad_norm: 1.0
     truncate_grads: True
-    num_actors: 256 # 128 # 512
+    num_actors: 256 # 1 # 256
 
-    decouple_value_actors: True
-    apg_num_actors: 256
+    decouple_value_actors: False
+    apg_num_actors: 256 # 1 # 256
 
     save_interval: 400
     dyn_buffer_size: 99840 # 1e5 # 1e6 # 99840 % 256 = 0
@@ -67,8 +74,8 @@ params:
     dyn_pred_batch_size: 64 # 1024
     filter_sigma_events: False
 
-    dyn_model_checkpoint: './logs/Go2/neuro_diff_sim/20/11-24-2024-16-12-09/best_policy.pt' # './logs/Go2/neuro_diff_sim/20/11-23-2024-15-53-21/best_policy.pt'
-    act_model_checkpoint: './logs/Go2/neuro_diff_sim/20/11-24-2024-16-12-09/df_go2_neuro_diff_simpolicy_iter2000_reward361.970.pt'
+    dyn_model_checkpoint: './logs/Go2/neuro_diff_sim/20/12-06-2024-02-02-19/best_policy.pt' # './logs/Go2/neuro_diff_sim/20/11-23-2024-15-53-21/best_policy.pt'
+    act_model_checkpoint: './logs/Go2/neuro_diff_sim/20/12-06-2024-02-02-19/best_policy.pt'
     dyn_model_load: False # True
 
     wandb_track: True

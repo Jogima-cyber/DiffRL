@@ -22,11 +22,17 @@ class Go2TerrainRender(Go2Terrain):
         self.camera_width = 480 #960
 
         self.camera_offsets = [
+                [0.5, -0.5, 0.1, 0.0, 0.0, -0.1],
+                [0.7, 0.0, -0.05, 0.0, 0.0, -0.05],
+                [0.0, 0.7, -0.05, 0.0, 0.0, -0.05],
+                [0.3, 0.3, 1.0, 0.0, 0.0, 0.0],
+        ]
+        """self.camera_offsets = [
                 [0.3, -0.3, 0.1, 0.0, 0.0, -0.1],
                 [0.4, 0.0, -0.05, 0.0, 0.0, -0.05],
                 [0.0, 0.5, -0.05, 0.0, 0.0, -0.05],
                 [0.3, 0.3, 1.0, 0.0, 0.0, 0.0],
-        ]
+        ]"""
         self.camera_handles = []
         camera_props = gymapi.CameraProperties()
         camera_props.width = self.camera_width

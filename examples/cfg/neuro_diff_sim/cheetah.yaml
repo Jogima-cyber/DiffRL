@@ -31,6 +31,9 @@ params:
     actor_learning_rate: 2e-3 # 5e-4 # 2e-3 # adam
     critic_learning_rate: 2e-3 # adam
     dyn_model_learning_rate: 2e-3 # adam
+
+    train_value_function: True
+
     lr_schedule: linear # ['constant', 'linear']
     target_critic_alpha: 0.2
     obs_rms: True

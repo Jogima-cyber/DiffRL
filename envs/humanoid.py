@@ -405,7 +405,7 @@ class HumanoidEnv(DFlexEnv):
     
         self.rew_buf[invalid_masks] = 0.
 
-    def diffRecalculateReward(self, obs, actions, offids = None, imagined_trajs = None):
+    def diffRecalculateReward(self, obs, actions, last_actions, last_last_actions, offids = None, imagined_trajs = None, maac = False):
         up_reward = 0.1 * obs[:, 53]
         heading_reward = obs[:, 54]
 
@@ -417,9 +417,10 @@ class HumanoidEnv(DFlexEnv):
         progress_reward = obs[:, 5]
 
         rew = progress_reward + up_reward + heading_reward + height_reward + torch.sum(actions ** 2, dim = -1) * self.action_penalty
-        if offids is None:
-            rew[self.invalid_masks] = 0.
-        else:
-            rew[self.invalid_masks[offids]] = 0.
+        if not maac:
+            if offids is None:
+                rew[self.invalid_masks] = 0.
+            else:
+                rew[self.invalid_masks[offids]] = 0.
 
         return rew

@@ -156,3 +156,75 @@ class ActorStochasticMLP(nn.Module):
             return sample, dist.log_prob(sample).sum(-1), dist.entropy().sum(-1)
         else:
             return sample, dist.log_prob(actions).sum(-1), dist.entropy().sum(-1)
+
+LOG_STD_MAX = 2
+LOG_STD_MIN = -5
+class SAPOActorStochasticMLP(nn.Module):
+    def __init__(self, obs_dim, action_dim, cfg_network, device='cuda:0'):
+        super(SAPOActorStochasticMLP, self).__init__()
+
+        self.device = device
+
+        self.recurrent = cfg_network["actor_mlp"].get("recurrent", False)
+
+        if self.recurrent:
+            self.hidden_size = int(cfg_network["actor_mlp"].get("hidden_size", 128))
+            self.gru = nn.GRU(obs_dim, self.hidden_size, batch_first=True).to(device)
+            self.layer_dims = [obs_dim + self.hidden_size] + cfg_network['actor_mlp']['units']
+        else:
+            self.layer_dims = [obs_dim] + cfg_network['actor_mlp']['units']
+
+        init_ = lambda m: model_utils.init(m, nn.init.orthogonal_, lambda x: nn.init.
+                        constant_(x, 0), np.sqrt(2))
+
+        modules = []
+        for i in range(len(self.layer_dims) - 1):
+            modules.append(nn.Linear(self.layer_dims[i], self.layer_dims[i + 1]))
+            modules.append(model_utils.get_activation_func(cfg_network['actor_mlp']['activation']))
+            modules.append(torch.nn.LayerNorm(self.layer_dims[i+1]))
+
+        self.mlp = nn.Sequential(*modules).to(device)
+        self.fc_mean = nn.Linear(self.layer_dims[-1], action_dim).to(device)
+        self.fc_logstd = nn.Linear(self.layer_dims[-1], action_dim).to(device)
+
+        self.action_dim = action_dim
+        self.obs_dim = obs_dim
+
+        print(self.mlp)
+
+    def forward(self, obs, deterministic = False, l = None):
+        #self.clamp_std()
+        x = obs
+        time_latent = l
+        if self.recurrent:
+            out, time_latent = self.gru(obs.unsqueeze(1), l)
+            x = torch.cat([obs.unsqueeze(1), out], dim=-1)
+        h = self.mlp(x)
+        mean = self.fc_mean(h)
+
+        if deterministic:
+            if self.recurrent:
+                return mean.squeeze(1), None, time_latent
+            else:
+                return mean, None, time_latent
+        else:
+            log_std = self.fc_logstd(h)
+            log_std = torch.tanh(log_std)
+            log_std = LOG_STD_MIN + 0.5 * (LOG_STD_MAX - LOG_STD_MIN) * (log_std + 1)
+
+            std = log_std.exp()
+            dist = Normal(mean, std)
+            sample = dist.rsample()  # for reparameterization trick (mean + std * N(0,1))
+
+            """# Compute entropy
+            dim = mean.size(-1)
+            ent = 0.5 * dim * (1 + torch.log(torch.tensor(2 * torch.pi))) + torch.sum(log_std, dim=-1)
+            ent += torch.log((1 - torch.tanh(sample).pow(2)) + 1e-6).sum(-1)"""
+            log_prob = dist.log_prob(sample)
+            log_prob -= torch.log((1 - torch.tanh(sample).pow(2)) + 1e-6)
+            log_prob = -log_prob.sum(-1)
+
+            if self.recurrent:
+                return sample.squeeze(1), log_prob.squeeze(1), time_latent
+            else:
+                return sample, log_prob, time_latent

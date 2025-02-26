@@ -79,7 +79,24 @@ def get_args(): # TODO: delve into the arguments
         {"name": "--unroll-img", "action": "store_true", "default": False,
             "help": "whether to unroll the trajectories with the learned model instead of the simulator.."},
         {"name": "--multi-modal-cor", "action": "store_true", "default": False,
-            "help": "whether to try to correct for the dynamics uncovered by the world model."}]
+            "help": "whether to try to correct for the dynamics uncovered by the world model."},
+        {"name": "--generate-dataset-only", "action": "store_true", "default": False,
+            "help": "whether to be in pretraining dataset generation mode only (no training)."},
+        {"name": "--load-pretrain-dataset", "action": "store_true", "default": False,
+            "help": "whether to use an already generated pretraining dataset."},
+        {"name": "--pretrain-dataset-path", "type": str, "default": "",
+            "help": "path to the already generated pretraining dataset."},
+        {"name": "--log-gradients", "action": "store_true", "default": False,
+            "help": "wether to run the experiment comparing the gradients of the different methods."},
+        {"name": "--no-stoch-dyn-model", "action": "store_true", "default": False,
+            "help": "wether to use stochastic dynamics models or not."},
+        {"name": "--no-residual-dyn-model", "action": "store_true", "default": False,
+            "help": "wether to use residual dynamics models or not."},
+        {"name": "--no-stoch-act-model", "action": "store_true", "default": False,
+            "help": "wether to use a stochastic actor or not."},
+        {"name": "--no-value", "action": "store_true", "default": False,
+            "help": "wether to use a value function approximator or not."}]
+
     # parse arguments
     args = parse_arguments(
         description="NeuroDiffSim",

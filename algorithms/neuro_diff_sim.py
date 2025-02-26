@@ -34,6 +34,123 @@ from typing import NamedTuple
 import gym
 from gym.spaces import Box
 
+def test_reorganized_array(init_arr, final_arr, dyn_rb_pos, dyn_rb_num_envs, new_num_envs, steps_per_env, env_factor, name):
+    """
+    Test that the final rearranged array matches the expected indexing pattern of the original array.
+    """
+
+    # Basic shape and indexing checks for the first environment set
+    assert init_arr[:dyn_rb_pos][::dyn_rb_num_envs].shape == final_arr[:new_num_envs * steps_per_env][::new_num_envs].shape, \
+        f"[{name}] Shape mismatch after final reordering for the first set of environments."
+    assert (init_arr[:dyn_rb_pos][::dyn_rb_num_envs] == final_arr[:new_num_envs * steps_per_env][::new_num_envs]).all(), \
+        f"[{name}] Final indexing check failed for the first environment set."
+
+    if new_num_envs >= 2:
+        assert (init_arr[:dyn_rb_pos][1::dyn_rb_num_envs] == final_arr[:new_num_envs * steps_per_env][1::new_num_envs]).all(), \
+            f"[{name}] Final indexing check failed for the first environment set (offset by 1)."
+
+    # If we have more than one factor (env_factor >= 2), test the second environment set
+    if env_factor >= 2:
+        assert init_arr[:dyn_rb_pos][new_num_envs::dyn_rb_num_envs].shape == final_arr[new_num_envs * steps_per_env : 2 * new_num_envs * steps_per_env][::new_num_envs].shape, \
+            f"[{name}] Shape mismatch after final reordering for the second environment factor set."
+        assert (init_arr[:dyn_rb_pos][new_num_envs :: dyn_rb_num_envs] == final_arr[new_num_envs * steps_per_env : 2 * new_num_envs * steps_per_env][::new_num_envs]).all(), \
+            f"[{name}] Indexing check failed for the second environment factor set."
+
+        if new_num_envs >= 2:
+            assert (init_arr[:dyn_rb_pos][new_num_envs + 1 :: dyn_rb_num_envs] == final_arr[new_num_envs * steps_per_env : 2 * new_num_envs * steps_per_env][1 :: new_num_envs]).all(), \
+                f"[{name}] Indexing check failed for the second environment factor set (offset by 1)."
+
+    assert (init_arr[:dyn_rb_pos][(env_factor - 1) * new_num_envs :: dyn_rb_num_envs] ==
+            final_arr[(env_factor - 1) * new_num_envs * steps_per_env : env_factor * new_num_envs * steps_per_env][:: new_num_envs]).all(), \
+        f"[{name}] Indexing check failed for the last environment factor set."
+    if new_num_envs >= 2:
+        # Test the last environment factor indexing
+        assert (init_arr[:dyn_rb_pos][(env_factor - 1) * new_num_envs + 1 :: dyn_rb_num_envs] ==
+                final_arr[(env_factor - 1) * new_num_envs * steps_per_env : env_factor * new_num_envs * steps_per_env][1 :: new_num_envs]).all(), \
+            f"[{name}] Indexing check failed for the last environment factor set (offset by 1)."
+
+
+def restructure_old_rb(dyn_rb, dyn_rb_observations, dyn_rb_actions, dyn_rb_next_observations,
+                       dyn_rb_dones, dyn_rb_rewards, dyn_rb_p_ini_hidden_in, dyn_rb_num_envs,
+                       dyn_rb_pos, new_num_envs):
+
+    assert dyn_rb_pos < dyn_rb.buffer_size, "Assertion 1 failed: dyn_rb_pos must be less than buffer_size."
+    assert new_num_envs <= dyn_rb_num_envs, "Assertion 2 failed: new_num_envs must be <= dyn_rb_num_envs."
+    assert dyn_rb_num_envs % new_num_envs == 0, "Assertion 3 failed: dyn_rb_num_envs must be divisible by new_num_envs."
+    assert dyn_rb_pos % new_num_envs == 0, "Assertion 4 failed: dyn_rb_pos must be divisible by new_num_envs."
+
+    # Save initial copies of arrays for testing later
+    init_obs = dyn_rb_observations.clone()
+    init_next_obs = dyn_rb_next_observations.clone()
+    init_act = dyn_rb_actions.clone()
+    init_dones = dyn_rb_dones.clone()
+    init_rewards = dyn_rb_rewards.clone()
+    init_hidden = dyn_rb_p_ini_hidden_in.clone()
+
+    # Compute parameters
+    steps_per_env = dyn_rb_pos // dyn_rb_num_envs
+    env_factor = dyn_rb_num_envs // new_num_envs
+
+    obs_shape = dyn_rb_observations.shape[1:]
+    act_shape = dyn_rb_actions.shape[1:]
+    hidden_shape = dyn_rb_p_ini_hidden_in.shape[1:]
+
+    # Reshape arrays before reorganizing
+    dyn_rb_observations = dyn_rb_observations[:dyn_rb_pos].view(steps_per_env, dyn_rb_num_envs, *obs_shape)
+    dyn_rb_next_observations = dyn_rb_next_observations[:dyn_rb_pos].view(steps_per_env, dyn_rb_num_envs, *obs_shape)
+    dyn_rb_actions = dyn_rb_actions[:dyn_rb_pos].view(steps_per_env, dyn_rb_num_envs, *act_shape)
+    dyn_rb_dones = dyn_rb_dones[:dyn_rb_pos].view(steps_per_env, dyn_rb_num_envs)
+    dyn_rb_rewards = dyn_rb_rewards[:dyn_rb_pos].view(steps_per_env, dyn_rb_num_envs)
+    dyn_rb_p_ini_hidden_in = dyn_rb_p_ini_hidden_in[:dyn_rb_pos].view(steps_per_env, dyn_rb_num_envs, *hidden_shape)
+
+    # Perform the reorganization
+    # Observations
+    dyn_rb_observations = dyn_rb_observations.reshape(steps_per_env, env_factor, new_num_envs, *obs_shape)
+    dyn_rb_observations = dyn_rb_observations.swapaxes(0, 1).reshape(-1, *obs_shape)
+
+    # Next Observations
+    dyn_rb_next_observations = dyn_rb_next_observations.reshape(steps_per_env, env_factor, new_num_envs, *obs_shape)
+    dyn_rb_next_observations = dyn_rb_next_observations.swapaxes(0, 1).reshape(-1, *obs_shape)
+
+    # Actions
+    dyn_rb_actions = dyn_rb_actions.reshape(steps_per_env, env_factor, new_num_envs, *act_shape)
+    dyn_rb_actions = dyn_rb_actions.swapaxes(0, 1).reshape(-1, *act_shape)
+
+    # Dones
+    dyn_rb_dones = dyn_rb_dones.reshape(steps_per_env, env_factor, new_num_envs)
+    dyn_rb_dones = dyn_rb_dones.swapaxes(0, 1).reshape(-1)
+
+    # Rewards
+    dyn_rb_rewards = dyn_rb_rewards.reshape(steps_per_env, env_factor, new_num_envs)
+    dyn_rb_rewards = dyn_rb_rewards.swapaxes(0, 1).reshape(-1)
+
+    # Hidden states
+    dyn_rb_p_ini_hidden_in = dyn_rb_p_ini_hidden_in.reshape(steps_per_env, env_factor, new_num_envs, *hidden_shape)
+    dyn_rb_p_ini_hidden_in = dyn_rb_p_ini_hidden_in.swapaxes(0, 1).reshape(-1, *hidden_shape)
+
+    # Call the test function for each array
+    test_reorganized_array(init_obs, dyn_rb_observations, dyn_rb_pos, dyn_rb_num_envs, new_num_envs, steps_per_env, env_factor, "Observations")
+    test_reorganized_array(init_next_obs, dyn_rb_next_observations, dyn_rb_pos, dyn_rb_num_envs, new_num_envs, steps_per_env, env_factor, "Next Observations")
+    test_reorganized_array(init_act, dyn_rb_actions, dyn_rb_pos, dyn_rb_num_envs, new_num_envs, steps_per_env, env_factor, "Actions")
+    test_reorganized_array(init_dones, dyn_rb_dones, dyn_rb_pos, dyn_rb_num_envs, new_num_envs, steps_per_env, env_factor, "Dones")
+    test_reorganized_array(init_rewards, dyn_rb_rewards, dyn_rb_pos, dyn_rb_num_envs, new_num_envs, steps_per_env, env_factor, "Rewards")
+    test_reorganized_array(init_hidden, dyn_rb_p_ini_hidden_in, dyn_rb_pos, dyn_rb_num_envs, new_num_envs, steps_per_env, env_factor, "Hidden States")
+
+    dyn_rb.observations[:dyn_rb_pos] = dyn_rb_observations
+    dyn_rb.next_observations[:dyn_rb_pos] = dyn_rb_next_observations
+    dyn_rb.actions[:dyn_rb_pos] = dyn_rb_actions
+    dyn_rb.dones[:dyn_rb_pos] = dyn_rb_dones
+    dyn_rb.rewards[:dyn_rb_pos] = dyn_rb_rewards
+    dyn_rb.p_ini_hidden_in[:dyn_rb_pos] = dyn_rb_p_ini_hidden_in
+
+    dyn_rb.started_adding = True
+    dyn_rb.pos = dyn_rb_pos
+    dyn_rb.prev_start_idx = dyn_rb_pos - new_num_envs
+    dyn_rb.prev_stop_idx = dyn_rb_pos
+    dyn_rb.markers[dyn_rb.prev_start_idx : dyn_rb.prev_stop_idx] = 1
+    dyn_rb.prev_overflow = False
+    dyn_rb.prev_overflow_size = 0
+
 class SeqReplayBufferSamples(NamedTuple):
     observations: torch.Tensor
     actions: torch.Tensor
@@ -389,6 +506,17 @@ def two_hot(x, num_bins, vmin, vmax):
     soft_two_hot.scatter_(1, (bin_idx.unsqueeze(1) + 1) % num_bins, bin_offset)
     return soft_two_hot
 
+def gather_all_gradients(model):
+    # Ensure all gradients are available
+    gradients = []
+    for param in model.parameters():
+        if param.grad is not None:  # Some parameters might not have gradients
+            gradients.append(param.grad.view(-1))  # Flatten the gradient tensor
+
+    # Concatenate all gradients into a single tensor
+    mega_gradient = torch.cat(gradients)
+    return mega_gradient
+
 def symlog(x):
     """
     Symmetric logarithmic function.
@@ -401,11 +529,20 @@ class NeuroDiffSim:
         self.env_type = cfg["params"]["general"]["env_type"]
 
         seeding(cfg["params"]["general"]["seed"])
+        self.log_gradients = cfg["params"]["general"]['log_gradients']
+        self.no_stoch_dyn_model = cfg["params"]["general"]['no_stoch_dyn_model'] or cfg["params"]["config"].get("no_stoch_dyn_model", False)
+        self.no_residual_dyn_model = cfg["params"]["general"]['no_residual_dyn_model']
+        self.no_stoch_act_model = cfg["params"]["general"]['no_stoch_act_model'] or cfg["params"]["config"].get("no_stoch_act_model", False)
+        self.no_value = cfg["params"]["general"]['no_value']
 
         if self.env_type == "dflex":
             import dflex as df
             import envs
             env_fn = getattr(envs, cfg["params"]["diff_env"]["name"])
+            no_grad = True
+            if self.log_gradients:
+                no_grad = False
+
             self.env = env_fn(num_envs = cfg["params"]["config"]["num_actors"], \
                               device = cfg["params"]["general"]["device"], \
                               render = cfg["params"]["general"]["render"], \
@@ -413,7 +550,7 @@ class NeuroDiffSim:
                               episode_length=cfg["params"]["diff_env"].get("episode_length", 250), \
                               stochastic_init = cfg["params"]["diff_env"].get("stochastic_env", True), \
                               MM_caching_frequency = cfg["params"]['diff_env'].get('MM_caching_frequency', 1), \
-                              no_grad = True)
+                              no_grad = no_grad)
             self.max_episode_length = self.env.episode_length
         elif self.env_type == "isaac_gym":
             import isaacgym
@@ -429,6 +566,29 @@ class NeuroDiffSim:
             self.env.num_actions = self.env.num_acts
             self.max_episode_length = self.env.max_episode_length
             self.num_dyn_obs = self.env.num_dyn_obs
+        elif self.env_type == "metaworld":
+            import metaworld
+            import random
+            import gymnasium
+            from gymnasium.vector.sync_vector_env import SyncVectorEnv
+            from gymnasium.wrappers import RecordVideo
+            def env_fn(seed):
+                print(seed, cfg["params"]["general"]["seed"])
+                if seed == cfg["params"]["general"]["seed"] + 1:
+                    env = metaworld.envs.ALL_V2_ENVIRONMENTS_GOAL_OBSERVABLE[cfg["params"]["metaworld"]["name"]](seed=seed, render_mode="rgb_array")
+                    trigger = lambda t: t % 10 == 0
+                    env = RecordVideo(env, video_folder="./save_videos1", episode_trigger=trigger, disable_logger=False)
+                else:
+                    env = metaworld.envs.ALL_V2_ENVIRONMENTS_GOAL_OBSERVABLE[cfg["params"]["metaworld"]["name"]](seed=seed)
+                return env
+
+            n_env = cfg["params"]["config"]["num_actors"]
+            self.env = SyncVectorEnv([lambda seed=seed: env_fn(seed + cfg["params"]["general"]["seed"]) for seed in range(n_env)], autoreset_mode = "SameStep")
+
+            self.env.num_actions = self.env.action_space.shape[-1]
+            self.max_episode_length = self.env.envs[0].max_path_length
+            self.num_dyn_obs = self.env.observation_space.shape[-1]
+            self.env.num_obs = self.num_dyn_obs
         else:
             raise ValueError(
                 f"env type {self.env_type} is not supported."
@@ -454,13 +614,17 @@ class NeuroDiffSim:
             self.lam = cfg['params']['config'].get('lambda', 0.95)
 
         self.steps_num = cfg["params"]["config"]["steps_num"]
+        self.steps_num_schedule = cfg["params"]["config"].get("steps_num_schedule", False)
+        if self.steps_num_schedule:
+            self.steps_num_start = int(cfg["params"]["config"]["steps_num_start"])
+
         self.max_epochs = cfg["params"]["config"]["max_epochs"]
         self.actor_lr = float(cfg["params"]["config"]["actor_learning_rate"])
         self.critic_lr = float(cfg['params']['config']['critic_learning_rate'])
         self.dyn_model_lr = float(cfg['params']['config']['dyn_model_learning_rate'])
         self.lr_schedule = cfg['params']['config'].get('lr_schedule', 'linear')
         self.actor_lr_schedule_min = float(cfg["params"]["config"].get("actor_lr_schedule_min", 1e-5))
-        self.train_value_function = cfg["params"]["config"].get("train_value_function", True)
+        self.train_value_function = cfg["params"]["config"].get("train_value_function", True) and not self.no_value
 
         self.decouple_value_actors = cfg["params"]["config"].get("decouple_value_actors", False)
         if self.decouple_value_actors:
@@ -471,7 +635,7 @@ class NeuroDiffSim:
         self.obs_rms = None
         self.act_rms = None
         if cfg['params']['config'].get('obs_rms', False):
-            if self.env_type == "dflex":
+            if self.env_type == "dflex" or self.env_type == "metaworld":
                 self.obs_rms = RunningMeanStd(shape = (self.num_obs), device = self.device)
             else:
                 self.obs_rms = RunningMeanStd(shape = (self.num_dyn_obs), device = self.device)
@@ -551,12 +715,16 @@ class NeuroDiffSim:
             self.hidden_to_value = cfg["params"]["network"]["dyn_model_mlp"].get("hidden_to_value", True)
 
         self.separate = cfg['params']['network']['critic_mlp'].get("separate", True)
+        self.asymetrical_value = cfg["params"]["network"]["critic_mlp"].get("asymetrical", True)
         if self.separate:
             if self.env_type == "dflex":
                 self.critic = critic_fn(self.num_obs, cfg['params']['network'], device = self.device)
             else:
                 #self.critic = critic_fn(self.num_act_obs, cfg['params']['network'], device = self.device) # /!\ or partial obs ?
-                self.critic = critic_fn(self.num_dyn_obs, cfg['params']['network'], device = self.device) # /!\ or partial obs ?
+                if self.asymetrical_value:
+                    self.critic = critic_fn(self.num_dyn_obs, cfg['params']['network'], device = self.device) # /!\ or partial obs ?
+                else:
+                    self.critic = critic_fn(self.num_act_obs, cfg['params']['network'], device = self.device)
         else:
             self.critic = self.actor
 
@@ -578,6 +746,10 @@ class NeuroDiffSim:
             self.vmax = cfg['params']['network']['dyn_model_mlp']['vmax']
 
         self.dyn_model_load = cfg["params"]["config"].get("dyn_model_load", False)
+        self.load_pretrain_dataset = cfg['params']['general']['load_pretrain_dataset']
+        if self.load_pretrain_dataset:
+           self.actor, dyn_rb_observations, dyn_rb_actions, dyn_rb_next_observations, dyn_rb_dones, dyn_rb_rewards, dyn_rb_p_ini_hidden_in, dyn_rb_num_envs, dyn_rb_pos, self.obs_rms, self.act_rms, self.ret_rms = torch.load(cfg["params"]["general"]["pretrain_dataset_path"])
+
         if self.dyn_model_load:
             _, _, _, self.dyn_model, _, _, _ = torch.load(cfg["params"]["config"]["dyn_model_checkpoint"])
             self.actor, _, _, _, self.obs_rms, _, _ = torch.load(cfg["params"]["config"]["act_model_checkpoint"])
@@ -617,7 +789,7 @@ class NeuroDiffSim:
         if self.env_type == "dflex":
             self.obs_total_size += self.num_obs
         else:
-            if self.separate:
+            if self.separate and self.asymetrical_value:
                 self.obs_total_size += self.num_dyn_obs
             else:
                 self.obs_total_size += self.num_act_obs
@@ -651,6 +823,7 @@ class NeuroDiffSim:
         if self.decouple_value_actors:
             rb_num_envs = self.apg_num_actors
 
+        self.generate_dataset_only = cfg['params']['general']['generate_dataset_only']
         if self.env_type == "dflex":
             if self.dyn_recurrent:
                 self.dyn_rb = SeqReplayBuffer(
@@ -683,7 +856,7 @@ class NeuroDiffSim:
                     self.dyn_seq_len,
                     rb_num_envs,
                     self.dyn_hidden_size,
-                    storing_device = "cpu",
+                    storing_device = self.device, # "cpu",
                     training_device = self.device,
                 )
             else:
@@ -695,6 +868,11 @@ class NeuroDiffSim:
                     training_device = self.device,
                     n_envs = rb_num_envs,
                 )
+
+        if self.load_pretrain_dataset and self.dyn_recurrent:
+            restructure_old_rb(self.dyn_rb, dyn_rb_observations, dyn_rb_actions, dyn_rb_next_observations, dyn_rb_dones, dyn_rb_rewards, dyn_rb_p_ini_hidden_in, dyn_rb_num_envs, dyn_rb_pos, self.num_envs)
+        elif self.load_pretrain_dataset and not self.dyn_recurrent:
+            raise NotImplementedError("Loading a pretraining dataset when not using RNNs in the dyn model hasn't been implemented yet.")
 
         self.dyn_udt = int(cfg["params"]["config"].get("dyn_udt", 256))
         self.init_dyn_udt = int(cfg["params"]["config"].get("init_dyn_udt", 1000))
@@ -737,19 +915,34 @@ class NeuroDiffSim:
     def fill_replay_buffer(self, deterministic = False):
         filled_nb = 0
         self.p_hidden_in = None
+        if self.log_gradients:
+            self.p_hidden_in_ = None
         if self.dyn_recurrent:
             self.p_hidden_in = torch.zeros((1, self.num_envs, self.dyn_hidden_size), device=self.device)
+
         self.act_hidden_in = None
         if self.act_recurrent:
             self.act_hidden_in = torch.zeros((1, self.num_envs, self.act_hidden_size), device=self.device)
         self.last_action_recorded = torch.zeros((self.num_envs, self.num_actions), dtype=torch.float32, device=self.device)
+
         #!#if hasattr(self.env, "action_scale_prime"):
         #!#    self.last_action_recorded += -(self.env.action_bias / self.env.action_scale_prime).view(1, -1)
         with torch.no_grad():
             if self.env_type == "dflex":
                 obs = self.env.initialize_trajectory()
+            elif self.env_type == "metaworld":
+                obs, _ = self.env.reset()
+                obs = torch.tensor(obs, device = self.device, dtype = torch.float32)
             else:
                 obs = self.env.dyn_obs_buf.clone()
+
+            if self.generate_dataset_only:
+                with torch.no_grad():
+                    dummy_actions, _ = self.actor(self.env.full2partial_state(obs), deterministic = deterministic, l = self.act_hidden_in)
+                    dummy_actions = torch.tanh(dummy_actions)
+                    actions_min, _ = dummy_actions.min(dim = 0)
+                    actions_max, _ = dummy_actions.max(dim = 0)
+
             raw_obs = obs.clone()
             if self.obs_rms is not None:
                 # update obs rms
@@ -760,8 +953,19 @@ class NeuroDiffSim:
                 obs = self.obs_rms.normalize(obs)
             while filled_nb < self.min_replay:
                 if self.env_type == "dflex":
-                    actions, self.act_hidden_in = self.actor(obs, deterministic = deterministic, l = self.act_hidden_in)
+                    if self.no_stoch_act_model:
+                        actions, self.act_hidden_in = self.actor(obs, deterministic = True, l = self.act_hidden_in)
+                    else:
+                        actions, self.act_hidden_in = self.actor(obs, deterministic = deterministic, l = self.act_hidden_in)
                     actions = torch.tanh(actions)
+                    _, _, self.p_hidden_in = self.dyn_model(obs.unsqueeze(-2), actions.unsqueeze(-2), self.p_hidden_in) # to get the hiddden for the replay buffer
+
+                    if self.generate_dataset_only:
+                        cur_min, _ = actions.min(dim = 0)
+                        cur_max, _ = actions.max(dim = 0)
+                        actions_min = torch.min(actions_min, cur_min)
+                        actions_max = torch.max(actions_max, cur_max)
+
                     self.last_last_action_recorded = self.last_action_recorded.clone()
                     self.last_action_recorded = actions.clone()
                     next_obs, rew, done, extra_info = self.env.neurodiff_step(actions)
@@ -771,8 +975,38 @@ class NeuroDiffSim:
                         real_next_obs[done_idx] = extra_info['obs_before_reset'][done_idx]
                         self.last_action_recorded[done_idx] = 0.
                         self.last_last_action_recorded[done_idx] = 0.
+                elif self.env_type == "metaworld":
+                    if self.no_stoch_act_model:
+                        actions, self.act_hidden_in = self.actor(obs, deterministic = True, l = self.act_hidden_in)
+                    else:
+                        actions, self.act_hidden_in = self.actor(obs, deterministic = deterministic, l = self.act_hidden_in)
+                    actions = torch.tanh(actions)
+                    if hasattr(self.env, "action_scale_prime"):
+                        actions = actions * self.env.action_scale_prime + self.env.action_bias
+                    self.last_last_action_recorded = self.last_action_recorded.clone()
+                    self.last_action_recorded = actions.clone()
+
+                    self.time_report.start_timer("env step")
+                    next_obs, rew, done, truncated, extra_info = self.env.step(actions.cpu().numpy())
+                    self.time_report.end_timer("env step")
+
+                    done = torch.tensor(np.logical_or(done, truncated), device = self.device, dtype = torch.float32)
+                    rew = torch.tensor(rew, device = self.device, dtype = torch.float32)
+                    next_obs = torch.tensor(next_obs, device = self.device, dtype = torch.float32)
+                    real_next_obs = next_obs.clone()
+                    if done.any():
+                        done_idx = torch.argwhere(done).squeeze()
+                        final_obs = np.stack(extra_info['final_obs'])[done_idx.cpu().numpy()]
+                        real_next_obs[done_idx] = torch.tensor(final_obs, device = self.device, dtype = torch.float32)
+                        self.last_action_recorded[done_idx] = 0.
+                        self.last_last_action_recorded[done_idx] = 0.
+                        if self.act_recurrent:
+                            self.act_hidden_in[:, done_idx] = 0.
                 else:
-                    actions, self.act_hidden_in = self.actor(self.env.full2partial_state(obs), deterministic = deterministic, l = self.act_hidden_in)
+                    if self.no_stoch_act_model:
+                        actions, self.act_hidden_in = self.actor(self.env.full2partial_state(obs), deterministic = True, l = self.act_hidden_in)
+                    else:
+                        actions, self.act_hidden_in = self.actor(self.env.full2partial_state(obs), deterministic = deterministic, l = self.act_hidden_in)
                     actions = torch.tanh(actions)
                     if hasattr(self.env, "action_scale_prime"):
                         actions = actions * self.env.action_scale_prime + self.env.action_bias
@@ -824,7 +1058,8 @@ class NeuroDiffSim:
                         )
                 else:
                     if self.dyn_recurrent:
-                        self.dyn_rb.add(raw_obs.detach(), real_next_obs.detach(), actions.detach(), rew.detach(), done.float(), torch.zeros((1, self.num_envs, self.dyn_hidden_size), device=self.device), done.float())
+                        # torch.zeros((1, self.num_envs, self.dyn_hidden_size), device=self.device)
+                        self.dyn_rb.add(raw_obs.detach(), real_next_obs.detach(), actions.detach(), rew.detach(), done.float(), self.p_hidden_in, done.float())
                     else:
                         self.dyn_rb.add(raw_obs.detach(), real_next_obs.detach(), actions.detach(), rew.detach(), done.float(), done.float())
 
@@ -841,14 +1076,33 @@ class NeuroDiffSim:
                             self.obs_rms.update(next_obs.clone())
                     # normalize the current obs
                     obs = self.obs_rms.normalize(next_obs.clone())
+
+        if self.log_gradients:
+            if self.dyn_recurrent:
+                self.p_hidden_in_ = self.p_hidden_in.clone()
+
+        if self.generate_dataset_only:
+            filename = "ppo_actions_minmax.pt"
+            print("actions_min", actions_min.cpu())
+            print("actions_max", actions_max.cpu())
+            torch.save((actions_min.cpu(), actions_max.cpu()), os.path.join(self.log_dir, "{}.pt".format(filename)))
         print("Filling done")
 
     def compute_actor_loss(self, deterministic = False):
         rew_acc = torch.zeros((self.steps_num + 1, self.num_envs + self.imagined_batch_size), dtype = torch.float32, device = self.device)
         gamma = torch.ones(self.num_envs + self.imagined_batch_size, dtype = torch.float32, device = self.device)
-        next_values = torch.zeros((self.steps_num + 1, self.num_envs + self.imagined_batch_size), dtype = torch.float32, device = self.device)
+        next_values = torch.zeros((self.steps_num + 1, self.num_envs + self.imagined_batch_size), dtype = torch.float32, device = self.device) # /!\ not compatible with steps num schedule
 
         actor_loss = torch.tensor(0., dtype = torch.float32, device = self.device)
+        if self.log_gradients:
+            rew_acc_ = torch.zeros((self.steps_num + 1, self.num_envs + self.imagined_batch_size), dtype = torch.float32, device = self.device)
+            next_values_ = torch.zeros((self.steps_num + 1, self.num_envs + self.imagined_batch_size), dtype = torch.float32, device = self.device)
+            actor_loss_ = torch.tensor(0., dtype = torch.float32, device = self.device)
+
+            rew_acc_diff = torch.zeros((self.steps_num + 1, self.num_envs + self.imagined_batch_size), dtype = torch.float32, device = self.device)
+            next_values_diff = torch.zeros((self.steps_num + 1, self.num_envs + self.imagined_batch_size), dtype = torch.float32, device = self.device)
+            actor_loss_diff = torch.tensor(0., dtype = torch.float32, device = self.device)
+
         #dyn_loss = torch.tensor(0., dtype = torch.float32, device = self.device) ###
 
         with torch.no_grad():
@@ -864,6 +1118,11 @@ class NeuroDiffSim:
         # initialize trajectory to cut off gradients between episodes.
         if self.env_type == "dflex":
             obs = self.env.initialize_trajectory()
+            if self.log_gradients:
+                obs_diff = obs.clone()
+                obs_ = obs.clone()
+        elif self.env_type == "metaworld":
+            obs = torch.tensor(self.env._observations, device = self.device, dtype = torch.float32)
         else:
             obs = self.env.dyn_obs_buf.clone()
 
@@ -872,6 +1131,10 @@ class NeuroDiffSim:
             obs = torch.cat([obs, data.observations], dim = 0)
 
         raw_obs = obs.clone()
+        if self.log_gradients:
+            raw_obs_ = obs.clone()
+            raw_obs_diff = obs.clone()
+
         #raw_obs = obs.clone().requires_grad_(True) ###
         if self.unroll_img:
             true_raw_obs = obs.clone()
@@ -885,11 +1148,18 @@ class NeuroDiffSim:
                         self.obs_rms.update(obs)
             # normalize the current obs
             obs = obs_rms.normalize(obs)
+            if self.log_gradients:
+                obs_ = obs_rms.normalize(obs_)
+                obs_diff = obs_rms.normalize(obs_diff)
+
         #samples_used = 0. ##
         #active_trajectories = torch.ones(self.num_envs, dtype=torch.bool, device = self.device) ##
 
         if self.dyn_recurrent:
             self.p_hidden_in = self.p_hidden_in.detach()
+            if self.log_gradients:
+                self.p_hidden_in_ = self.p_hidden_in_.detach()
+
         if self.act_recurrent:
             self.act_hidden_in = self.act_hidden_in.detach()
 
@@ -898,13 +1168,21 @@ class NeuroDiffSim:
         last_actions[0] = self.last_action_recorded.clone()
         last_last_actions[0] = self.last_last_action_recorded.clone()
         last_last_actions[1] = self.last_action_recorded.clone()
-        for i in range(self.steps_num):
+
+        horizon = self.steps_num
+        if self.steps_num_schedule: # /!\ Not compatible with value function learning yet
+            horizon = int((self.steps_num - self.steps_num_start) * (self.iter_count / self.max_epochs) + self.steps_num_start)
+
+        for i in range(horizon):
             # collect data for critic training
             with torch.no_grad():
-                obs_for_obs_buf = obs.clone()
-                if not self.separate:
+                if self.unroll_img and False: # We tried with and it decreases significantly results
+                    obs_for_obs_buf = obs_rms.normalize(true_raw_obs.clone())
+                else:
+                    obs_for_obs_buf = obs.clone()
+                if not self.separate or not self.asymetrical_value:
                     obs_for_obs_buf = self.env.full2partial_state(obs_for_obs_buf)
-                if self.dyn_recurrent:
+                if self.dyn_recurrent and self.hidden_to_value:
                     obs_for_obs_buf = torch.cat([obs_for_obs_buf, self.p_hidden_in.clone().squeeze(0)], dim=-1)
                 if self.act_recurrent:
                     obs_for_obs_buf = torch.cat([obs_for_obs_buf, self.act_hidden_in.clone().squeeze(0)], dim=-1)
@@ -920,33 +1198,39 @@ class NeuroDiffSim:
                         #self.values[i] = self.target_critic(self.env.full2partial_state(obs.clone())).squeeze(-1)
                         self.values[i] = self.target_critic(obs.clone()).squeeze(-1)
 
-            if self.unroll_img:
-                #actions = self.actor(obs.detach(), deterministic = deterministic)
+            """if self.decouple_value_actors:
                 if self.env_type == "dflex":
-                    actions = self.actor(obs, deterministic = deterministic)
+                    actions_diff, act_hidden_in_diff = self.actor(obs[:self.apg_num_actors], deterministic = deterministic)
+                    with torch.no_grad():
+                        actions_nondiff, act_hidden_in_nondiff = self.actor(obs[self.apg_num_actors:], deterministic = deterministic)
                 else:
-                    actions = self.actor(self.env.full2partial_state(obs.clone()), deterministic = deterministic)
-            else:
-                """if self.decouple_value_actors:
-                    if self.env_type == "dflex":
-                        actions_diff, act_hidden_in_diff = self.actor(obs[:self.apg_num_actors], deterministic = deterministic)
-                        with torch.no_grad():
-                            actions_nondiff, act_hidden_in_nondiff = self.actor(obs[self.apg_num_actors:], deterministic = deterministic)
-                    else:
-                        actions_diff, act_hidden_in_diff = self.actor(
-                            self.env.full2partial_state(obs[:self.apg_num_actors].clone()), deterministic = deterministic, l = self.act_hidden_in)
-                        with torch.no_grad():
-                            actions_nondiff, act_hidden_in_nondiff = self.actor(
-                            self.env.full2partial_state(obs[self.apg_num_actors:].clone()), deterministic = deterministic, l = self.act_hidden_in)
+                    actions_diff, act_hidden_in_diff = self.actor(
+                        self.env.full2partial_state(obs[:self.apg_num_actors].clone()), deterministic = deterministic, l = self.act_hidden_in)
+                    with torch.no_grad():
+                        actions_nondiff, act_hidden_in_nondiff = self.actor(
+                        self.env.full2partial_state(obs[self.apg_num_actors:].clone()), deterministic = deterministic, l = self.act_hidden_in)
 
-                    actions = torch.cat([actions_diff, actions_nondiff], dim = 0)
-                else:"""
-                if self.env_type == "dflex":
+                actions = torch.cat([actions_diff, actions_nondiff], dim = 0)
+            else:"""
+            if self.env_type == "dflex" or self.env_type == "metaworld":
+                if self.no_stoch_act_model:
+                    actions, self.act_hidden_in = self.actor(obs, deterministic = True, l = self.act_hidden_in)
+                else:
                     actions, self.act_hidden_in = self.actor(obs, deterministic = deterministic, l = self.act_hidden_in)
+                if self.log_gradients:
+                    actions_, _ = self.actor(obs_, deterministic = deterministic, l = None)
+                    actions_diff, _ = self.actor(obs_diff, deterministic = deterministic, l = None)
+            else:
+                if self.no_stoch_act_model:
+                    actions, self.act_hidden_in = self.actor(self.env.full2partial_state(obs.clone()), deterministic = True, l = self.act_hidden_in)
                 else:
                     actions, self.act_hidden_in = self.actor(self.env.full2partial_state(obs.clone()), deterministic = deterministic, l = self.act_hidden_in)
 
             actions = torch.tanh(actions)
+            if self.log_gradients:
+                actions_ = torch.tanh(actions_)
+                actions_diff = torch.tanh(actions_diff)
+
             """std_seq = torch.linspace(0.05, 0.2, actions.shape[0]).to(actions.device).unsqueeze(-1).expand(actions.shape)
             noise = torch.normal(torch.zeros(actions.shape, dtype=actions.dtype, device=actions.device), std_seq)
             actions = actions + noise
@@ -973,12 +1257,34 @@ class NeuroDiffSim:
             #    actions[inactive_idx] = actions[inactive_idx].detach() ##
 
             if self.unroll_img:
-                real_next_obs = self.dyn_model(obs, actions)[0] + raw_obs
+                #real_next_obs = self.dyn_model(obs, actions)[0] + raw_obs
+                if self.no_residual_dyn_model:
+                     raise NotImplementedError("The no-residual-dyn-model flag is not compatible with the unroll-img flag.")
                 if self.env_type == "dflex":
                     next_obs, rew, done, extra_info = self.env.neurodiff_step(actions.detach())
                 else:
                     next_obs, rew, done, extra_info = self.env.step(actions.detach())
                     next_obs = self.env.dyn_obs_buf.clone()
+
+                if self.dyn_recurrent:
+                    real_next_obs, _, self.p_hidden_in = self.dyn_model(obs.unsqueeze(-2), actions.unsqueeze(-2), self.p_hidden_in)
+                else:
+                    if self.act_rms is not None:
+                        real_next_obs, _, self.p_hidden_in = self.dyn_model(obs.unsqueeze(-2), act_rms.normalize(actions).unsqueeze(-2), self.p_hidden_in)
+                    else:
+                        real_next_obs, _, self.p_hidden_in = self.dyn_model(obs.unsqueeze(-2), actions.unsqueeze(-2), self.p_hidden_in)
+
+                real_next_obs = real_next_obs.squeeze(-2) + raw_obs
+
+                if(done.any()):
+                    done_idx = torch.argwhere(done).squeeze()
+                    last_actions[i + 1, done_idx] = 0.
+                    self.last_action_recorded[done_idx] = 0.
+                    last_last_actions[i + 1, done_idx] = 0.
+                    last_last_actions[i + 2, done_idx] = 0.
+                    self.last_last_action_recorded[done_idx] = 0.
+                    if self.act_recurrent:
+                        self.act_hidden_in[:, done_idx] = 0.
             else:
                 #with torch.no_grad():
                 #    img_real_next_obs = self.dyn_model(obs, torch.tanh(actions))[0] + raw_obs ##
@@ -988,22 +1294,19 @@ class NeuroDiffSim:
                     #real_next_obs, next_obs, rew, done, extra_info = models.dyn_model.DynamicsFunction.apply(raw_obs, actions, self.dyn_model, self.env, obs_rms, self.env_type)
 
                     if self.env_type == "dflex":
-                        with torch.no_grad():
-                            next_obs, rew, done, extra_info = self.env.neurodiff_step(actions[:self.num_envs].detach())
+                        if self.log_gradients:
+                            next_obs_diff, rew_diff, done, extra_info = self.env.neurodiff_step(actions_diff[:self.num_envs])
+                            next_obs = next_obs_diff.detach().clone()
+                            rew = rew_diff.detach().clone()
+                        else:
+                            with torch.no_grad():
+                                next_obs, rew, done, extra_info = self.env.neurodiff_step(actions[:self.num_envs].detach())
 
                         # Here we must wire the real next obs into the backprop graph, which next_obs isn't in case of last obs of the trajectory
                         # because next_obs is the obs after the env was reset
                         real_next_obs = next_obs.clone()
-                        if(done.any()):
-                            done_idx = torch.argwhere(done).squeeze()
-                            real_next_obs[done_idx] = extra_info['obs_before_reset'][done_idx]
-                            last_actions[i + 1, done_idx] = 0.
-                            self.last_action_recorded[done_idx] = 0.
-                            last_last_actions[i + 1, done_idx] = 0.
-                            last_last_actions[i + 2, done_idx] = 0.
-                            self.last_last_action_recorded[done_idx] = 0.
-                            if self.act_recurrent:
-                                self.act_hidden_in[:, done_idx] = 0.
+                        if self.log_gradients:
+                            real_next_obs_diff = next_obs_diff.clone()
                     elif self.env_type == "isaac_gym":
                         with torch.no_grad():
                             self.time_report.start_timer("env step")
@@ -1012,22 +1315,41 @@ class NeuroDiffSim:
                         done = extra_info['dones']
                         next_obs = self.env.dyn_obs_buf.clone()
                         real_next_obs = next_obs.clone()
-                        if(done.any()):
-                            done_idx = torch.argwhere(done).squeeze()
-                            real_next_obs[done_idx] = extra_info['obs_before_reset'][done_idx]
-                            last_actions[i + 1, done_idx] = 0.
-                            self.last_action_recorded[done_idx] = 0.
-                            last_last_actions[i + 1, done_idx] = 0.
-                            last_last_actions[i + 2, done_idx] = 0.
-                            self.last_last_action_recorded[done_idx] = 0.
-                            if self.act_recurrent:
-                                self.act_hidden_in[:, done_idx] = 0.
-                            """if hasattr(self.env, "action_scale_prime"):
-                                self.last_action_recorded[done_idx] += -(self.env.action_bias / self.env.action_scale_prime).squeeze()
-                                self.last_last_action_recorded[done_idx] += -(self.env.action_bias / self.env.action_scale_prime).squeeze()
-                                last_actions[i + 1, done_idx] += -(self.env.action_bias / self.env.action_scale_prime).squeeze()
-                                last_last_actions[i + 1, done_idx] += -(self.env.action_bias / self.env.action_scale_prime).squeeze()
-                                last_last_actions[i + 2, done_idx] += -(self.env.action_bias / self.env.action_scale_prime).squeeze()"""
+                    elif self.env_type == "metaworld":
+                        with torch.no_grad():
+                            self.time_report.start_timer("env step")
+                            next_obs, rew, done, truncated, extra_info = self.env.step(actions[:self.num_envs].detach().cpu().numpy())
+                            self.time_report.end_timer("env step")
+                        done = torch.tensor(np.logical_or(truncated, done), device = self.device, dtype = torch.float32)
+                        next_obs = torch.tensor(next_obs, device = self.device, dtype = torch.float32)
+                        rew = torch.tensor(rew, device = self.device, dtype = torch.float32)
+                        real_next_obs = next_obs.clone()
+
+                    if(done.any()):
+                        print(done.sum())
+                        done_idx = torch.argwhere(done).squeeze()
+                        if self.env_type == "metaworld":
+                            final_obs = np.stack(extra_info['final_obs'])[done_idx.cpu().numpy()]
+                            real_next_obs[done_idx] = torch.tensor(final_obs, device = self.device, dtype = torch.float32)
+                        else:
+                            real_next_obs[done_idx] = extra_info['obs_before_reset'][done_idx].detach()
+
+                        if self.log_gradients:
+                            real_next_obs_diff[done_idx] = extra_info['obs_before_reset'][done_idx].clone()
+
+                        last_actions[i + 1, done_idx] = 0.
+                        self.last_action_recorded[done_idx] = 0.
+                        last_last_actions[i + 1, done_idx] = 0.
+                        last_last_actions[i + 2, done_idx] = 0.
+                        self.last_last_action_recorded[done_idx] = 0.
+                        if self.act_recurrent:
+                            self.act_hidden_in[:, done_idx] = 0.
+                        """if hasattr(self.env, "action_scale_prime"):
+                            self.last_action_recorded[done_idx] += -(self.env.action_bias / self.env.action_scale_prime).squeeze()
+                            self.last_last_action_recorded[done_idx] += -(self.env.action_bias / self.env.action_scale_prime).squeeze()
+                            last_actions[i + 1, done_idx] += -(self.env.action_bias / self.env.action_scale_prime).squeeze()
+                            last_last_actions[i + 1, done_idx] += -(self.env.action_bias / self.env.action_scale_prime).squeeze()
+                            last_last_actions[i + 2, done_idx] += -(self.env.action_bias / self.env.action_scale_prime).squeeze()"""
 
                     if self.imagined_batch_size:
                         if self.dyn_recurrent:
@@ -1060,12 +1382,32 @@ class NeuroDiffSim:
                                 img_next_obs_delta, _, self.p_hidden_in = self.dyn_model(obs.unsqueeze(-2), actions.unsqueeze(-2), self.p_hidden_in)
                                 #NO_DYN_NORM#img_next_obs_delta, _, self.p_hidden_in = self.dyn_model(raw_obs.unsqueeze(-2), actions.unsqueeze(-2), self.p_hidden_in) #NO_DYN_NORM#
 
-                    img_next_obs = img_next_obs_delta.squeeze(-2) + raw_obs
+                    if self.no_residual_dyn_model:
+                        img_next_obs = img_next_obs_delta.squeeze(-2)
+                    else:
+                        img_next_obs = img_next_obs_delta.squeeze(-2) + raw_obs
                     real_next_obs = models.dyn_model.GradientSwapingFunction.apply(img_next_obs, real_next_obs.clone())
                     #if self.dyn_recurrent:
                     #    with torch.no_grad():
                     #        self.p_hidden_in = self.dyn_model(obs.unsqueeze(-2), torch.tanh(actions).unsqueeze(-2), self.p_hidden_in.clone())[2]
             replay_addable = True
+
+            if self.log_gradients:
+                if self.unroll_img:
+                     raise NotImplementedError("The unroll-img flag is not compatible with the log-gradients flag.")
+                if self.no_residual_dyn_model:
+                     raise NotImplementedError("The no-residual-dyn-model flag is not compatible with the log-gradients flag.")
+                if self.env_type != "dflex":
+                     raise NotImplementedError("The log-gradients flag is only compatible with the dflex environement.")
+
+                if self.dyn_recurrent:
+                    real_next_obs_, _, self.p_hidden_in_ = self.dyn_model(obs_.unsqueeze(-2), actions_.unsqueeze(-2), self.p_hidden_in_)
+                else:
+                    if self.act_rms is not None:
+                        real_next_obs_, _, self.p_hidden_in_ = self.dyn_model(obs_.unsqueeze(-2), act_rms.normalize(actions_).unsqueeze(-2), self.p_hidden_in_)
+                    else:
+                        real_next_obs_, _, self.p_hidden_in_ = self.dyn_model(obs_.unsqueeze(-2), actions_.unsqueeze(-2), self.p_hidden_in_)
+                real_next_obs_ = real_next_obs_.squeeze(-2) + raw_obs_
 
             #with torch.no_grad():
             #    alpha = 1 ##
@@ -1078,24 +1420,32 @@ class NeuroDiffSim:
                     print_warning("Got inf next_obs from sim")
                     nan_idx = torch.any(~torch.isfinite(next_obs), dim=-1)
                     next_obs[nan_idx] = 0.0
+                    if self.log_gradients:
+                        next_obs_diff[nan_idx] = 0.0
                     replay_addable = False
 
                 if (~torch.isfinite(real_next_obs)).sum() > 0:
                     print_warning("Got inf real_next_obs from sim")
                     nan_idx = torch.any(~torch.isfinite(real_next_obs), dim=-1)
                     real_next_obs[nan_idx] = 0.0
+                    if self.log_gradients:
+                        real_next_obs_diff[nan_idx] = 0.0
                     replay_addable = False
 
                 nan_idx = torch.any(real_next_obs.abs() > 1e6, dim=-1)
                 if nan_idx.sum() > 0:
                     print_warning("Got large real_next_obs from sim")
                     real_next_obs[nan_idx] = 0.0
+                    if self.log_gradients:
+                        real_next_obs_diff[nan_idx] = 0.0
                     replay_addable = False
 
                 nan_idx = torch.any(next_obs.abs() > 1e6, dim=-1)
                 if nan_idx.sum() > 0:
                     print_warning("Got large next_obs from sim")
                     next_obs[nan_idx] = 0.0
+                    if self.log_gradients:
+                        next_obs_diff[nan_idx] = 0.0
                     replay_addable = False
 
                 alpha = 6
@@ -1112,7 +1462,11 @@ class NeuroDiffSim:
                     if(done.any()):
                         done_idx = torch.argwhere(done).squeeze()
                         true_real_next_obs[done_idx] = extra_info['obs_before_reset'][done_idx]
-                    self.dyn_rb.add(true_raw_obs.detach(), true_real_next_obs.detach(), actions.detach(), rew.detach(), done.float(), done.float())
+                    #self.dyn_rb.add(true_raw_obs.detach(), true_real_next_obs.detach(), actions.detach(), rew.detach(), done.float(), done.float())
+                    if self.dyn_recurrent:
+                        self.dyn_rb.add(true_raw_obs[:self.num_envs].detach(), true_real_next_obs[:self.num_envs].detach(), actions[:self.num_envs].detach(), rew[:self.num_envs].detach(), done[:self.num_envs].float(), self.p_hidden_in[:, :self.num_envs].detach(), done[:self.num_envs].float())
+                    else:
+                        self.dyn_rb.add(true_raw_obs[:self.num_envs].detach(), true_real_next_obs[:self.num_envs].detach(), actions[:self.num_envs].detach(), rew[:self.num_envs].detach(), done[:self.num_envs].float(), done[:self.num_envs].float())
                 else:
                     if self.decouple_value_actors:
                         if self.dyn_recurrent:
@@ -1151,10 +1505,21 @@ class NeuroDiffSim:
                     real_next_obs.register_hook(create_hook())
                 if actions.requires_grad:
                     actions.register_hook(create_hook())
+
+                if self.log_gradients:
+                    if real_next_obs_.requires_grad:
+                        real_next_obs_.register_hook(create_hook())
+                    if actions_.requires_grad:
+                        actions_.register_hook(create_hook())
+
+                    if real_next_obs_diff.requires_grad:
+                        real_next_obs_diff.register_hook(create_hook())
+                    if actions_diff.requires_grad:
+                        actions_diff.register_hook(create_hook())
             #################################################
 
-            #with torch.no_grad():
-            #    raw_rew = rew.clone()
+            with torch.no_grad(): #/!\#
+                raw_rew = rew.clone() #/!\#
 
             # Differential reward recomputation
             self.time_report.start_timer("recomputing reward")
@@ -1162,19 +1527,26 @@ class NeuroDiffSim:
                 recalculated_rew = models.dyn_model.RewardsFunction.apply(raw_obs, actions, rew.clone(), self.dyn_model, obs_rms)
             else:
                 #real_next_obs = models.dyn_model.GradientAnalysorFunction.apply(real_next_obs.clone())
-                recalculated_rew = self.env.diffRecalculateReward(real_next_obs, actions, last_actions[i], last_last_actions[i], imagined_trajs = self.imagined_batch_size)
+                #AMP#recalculated_rew = self.env.diffRecalculateReward(real_next_obs, actions, last_actions[i], last_last_actions[i], raw_obs, imagined_trajs = self.imagined_batch_size)
                 #if (rew != recalculated_rew).any() and not self.unroll_img:
-                """if not torch.allclose(rew[:self.num_envs], recalculated_rew[:self.num_envs], rtol=1e-05, atol=1e-06, equal_nan=False) and not self.unroll_img: # and self.env_type == "dflex":
+                recalculated_rew = self.env.diffRecalculateReward(real_next_obs, actions, last_actions[i], last_last_actions[i], imagined_trajs = self.imagined_batch_size)
+                if not torch.allclose(rew[:self.num_envs], recalculated_rew[:self.num_envs], rtol=1e-05, atol=1e-06, equal_nan=False) and not self.unroll_img: # and self.env_type == "dflex":
                     print(i, (rew[:self.num_envs] != recalculated_rew[:self.num_envs]), rew[:self.num_envs], recalculated_rew[:self.num_envs], (rew[:self.num_envs] - recalculated_rew[:self.num_envs]))
                     print((rew[:self.num_envs] != recalculated_rew[:self.num_envs]).sum(), done.sum(), (done == (rew[:self.num_envs] != recalculated_rew[:self.num_envs])).sum())
                     print((~torch.isclose(rew[:self.num_envs], recalculated_rew[:self.num_envs], rtol=1e-05, atol=1e-07, equal_nan=False)).sum())
+                    print((rew[:self.num_envs] != recalculated_rew[:self.num_envs]).argwhere())
                     print('recalculated reward error')
 
-                    raise ValueError"""
-                rew = recalculated_rew.clone()
+                    raise ValueError
+            rew = recalculated_rew.clone()
 
-            with torch.no_grad(): #no_double_rew#
-                raw_rew = rew.clone() #no_double_rew#
+            #with torch.no_grad(): #no_double_rew#
+            #    raw_rew = rew.clone() #no_double_rew#
+
+            if self.log_gradients:
+                recalculated_rew_ = self.env.diffRecalculateReward(real_next_obs_, actions_, last_actions[i], last_last_actions[i], imagined_trajs = self.imagined_batch_size)
+                rew_ = recalculated_rew_.clone()
+
             self.time_report.end_timer("recomputing reward")
             #print(rew.mean())
 
@@ -1206,11 +1578,22 @@ class NeuroDiffSim:
             # Next obs recomputation, in case of reset, we must put back the state after reset into obs
             prev_obs = obs.clone()
             obs = real_next_obs.clone()
+            if self.log_gradients:
+                obs_ = real_next_obs_.clone()
+                obs_diff = real_next_obs_diff.clone()
+
             if done.any():
                 done_idx = torch.argwhere(done).squeeze()
                 obs[done_idx] = next_obs[done_idx].detach() # Cut off from the graph
+                if self.log_gradients:
+                    obs_[done_idx] = next_obs[done_idx].detach()
+                    obs_diff[done_idx] = next_obs_diff[done_idx].detach()
+
                 if self.dyn_recurrent:
                     self.p_hidden_in[:, done_idx] = torch.zeros((1, self.num_envs, self.dyn_hidden_size), device=self.device)[:, done_idx]
+                    if self.log_gradients:
+                        self.p_hidden_in_[:, done_idx] = torch.zeros((1, self.num_envs, self.dyn_hidden_size), device=self.device)[:, done_idx]
+
             ########################
 
             #with torch.no_grad():
@@ -1218,8 +1601,15 @@ class NeuroDiffSim:
 
             # scale the reward
             rew = rew * self.rew_scale
+            if self.log_gradients:
+                rew_ = rew_ * self.rew_scale
+                rew_diff = rew_diff * self.rew_scale
 
             raw_obs = obs.clone()
+            if self.log_gradients:
+                raw_obs_ = obs_.clone()
+                raw_obs_diff = obs_diff.clone()
+
             if self.unroll_img:
                 true_raw_obs = next_obs.clone()
             if self.obs_rms is not None:
@@ -1232,6 +1622,9 @@ class NeuroDiffSim:
                             self.obs_rms.update(obs)
                 # normalize the current obs
                 obs = obs_rms.normalize(obs)
+                if self.log_gradients:
+                    obs_ = obs_rms.normalize(obs_)
+                    obs_diff = obs_rms.normalize(obs_diff)
 
             if self.ret_rms is not None:
                 # update ret rms
@@ -1247,15 +1640,25 @@ class NeuroDiffSim:
 
             if self.train_value_function:
                 value_obs = obs
-                if not self.separate:
+                if self.log_gradients:
+                    value_obs_ = obs_
+                    value_obs_diff = obs_diff
+                if not self.separate or not self.asymetrical_value:
                     value_obs = self.env.full2partial_state(value_obs)
                 if self.dyn_recurrent and self.hidden_to_value:
                     value_obs = torch.cat([value_obs, self.p_hidden_in.clone().squeeze(0)], dim=-1)
+                    if self.log_gradients:
+                        value_obs_ = torch.cat([value_obs_, self.p_hidden_in_.clone().squeeze(0)], dim=-1)
+                        value_obs_diff = torch.cat([value_obs_diff, self.p_hidden_in_diff.clone().squeeze(0)], dim=-1)
+
                 if self.act_recurrent:
                     value_obs = torch.cat([value_obs, self.act_hidden_in.clone().squeeze(0)], dim=-1)
 
                 if self.separate:
                     next_values[i + 1] = self.target_critic(value_obs).squeeze(-1)
+                    if self.log_gradients:
+                        next_values_[i + 1] = self.target_critic(value_obs_).squeeze(-1)
+                        next_values_diff[i + 1] = self.target_critic(value_obs_diff).squeeze(-1)
                 else:
                     next_values[i + 1] = self.target_critic.value(value_obs).squeeze(-1)
 
@@ -1265,22 +1668,42 @@ class NeuroDiffSim:
                         or torch.isinf(extra_info['obs_before_reset'][id]).sum() > 0 \
                         or (torch.abs(extra_info['obs_before_reset'][id]) > 1e6).sum() > 0): # ugly fix for nan values
                         next_values[i + 1, id] = 0.
+                        if self.log_gradients:
+                            next_values_[i + 1, id] = 0.
+                            next_values_diff[i + 1, id] = 0.
                     elif id >= self.num_envs or self.episode_length[id] < self.max_episode_length: # early termination
                         next_values[i + 1, id] = 0.
+                        if self.log_gradients:
+                            next_values_[i + 1, id] = 0.
+                            next_values_diff[i + 1, id] = 0.
                     else: # otherwise, use terminal value critic to estimate the long-term performance
                         if self.obs_rms is not None:
                             real_obs = obs_rms.normalize(real_next_obs[id])
+                            if self.log_gradients:
+                                real_obs_ = obs_rms.normalize(real_next_obs_[id])
+                                real_obs_diff = obs_rms.normalize(real_next_obs_diff[id])
                         else:
                             real_obs = real_next_obs[id]
                         value_real_obs = real_obs.clone()
-                        if not self.separate:
+                        if self.log_gradients:
+                            value_real_obs_ = real_obs_.clone()
+                            value_real_obs_diff = real_obs_diff.clone()
+
+                        if not self.separate or not self.asymetrical_value:
                             value_real_obs = self.env.full2partial_state(value_real_obs)
                         if self.dyn_recurrent and self.hidden_to_value:
                             value_real_obs = torch.cat([value_real_obs, self.p_hidden_in.clone().squeeze(0)[id]], dim=-1)
+                            if self.log_gradients:
+                                value_real_obs_ = torch.cat([value_real_obs_, self.p_hidden_in_.clone().squeeze(0)[id]], dim=-1)
+                                value_real_obs_diff = torch.cat([value_real_obs_diff, self.p_hidden_in_diff.clone().squeeze(0)[id]], dim=-1)
+
                         if self.act_recurrent:
                             value_real_obs = torch.cat([value_real_obs, self.act_hidden_in.clone().squeeze(0)[id]], dim=-1)
                         if self.separate:
                             next_values[i + 1, id] = self.target_critic(value_real_obs).squeeze(-1)
+                            if self.log_gradients:
+                                next_values_[i + 1, id] = self.target_critic(value_real_obs_).squeeze(-1)
+                                next_values_diff[i + 1, id] = self.target_critic(value_real_obs_diff).squeeze(-1)
                         else:
                             next_values[i + 1, id] = self.target_critic.value(value_real_obs).squeeze(-1)
                 self.time_report.end_timer("handling done for value function")
@@ -1290,8 +1713,11 @@ class NeuroDiffSim:
                     raise ValueError
 
             rew_acc[i + 1, :] = rew_acc[i, :] + gamma * rew
+            if self.log_gradients:
+                rew_acc_[i + 1, :] = rew_acc_[i, :] + gamma * rew_
+                rew_acc_diff[i + 1, :] = rew_acc_diff[i, :] + gamma * rew_diff
 
-            if i < self.steps_num - 1:
+            if i < horizon - 1:
                 #to_cut_env_ids = torch.logical_or(done, bad_gradients_idx).nonzero(as_tuple = False).squeeze(-1) ##
                 ##actor_loss = actor_loss + (- rew_acc[i + 1, done_env_ids] - self.gamma * gamma[done_env_ids] * next_values[i + 1, done_env_ids]).sum()
                 #actor_loss = actor_loss + (- rew_acc[i + 1, to_cut_env_ids] - self.gamma * gamma[to_cut_env_ids] * next_values[i + 1, to_cut_env_ids]).sum() ##
@@ -1300,6 +1726,9 @@ class NeuroDiffSim:
                 else:
                     if self.train_value_function:
                         actor_loss = actor_loss + (- rew_acc[i + 1, done_env_ids] - self.gamma * gamma[done_env_ids] * next_values[i + 1, done_env_ids]).sum()
+                        if self.log_gradients:
+                            actor_loss_ = actor_loss_ + (- rew_acc_[i + 1, done_env_ids] - self.gamma * gamma[done_env_ids] * next_values_[i + 1, done_env_ids]).sum()
+                            actor_loss_diff = actor_loss_diff + (- rew_acc_diff[i + 1, done_env_ids] - self.gamma * gamma[done_env_ids] * next_values_diff[i + 1, done_env_ids]).sum()
                     else:
                         actor_loss = actor_loss + (- rew_acc[i + 1, done_env_ids]).sum() #- self.gamma * gamma[done_env_ids] * next_values[i + 1, done_env_ids]).sum()
             else:
@@ -1310,6 +1739,9 @@ class NeuroDiffSim:
                 else:
                     if self.train_value_function:
                         actor_loss = actor_loss + (- rew_acc[i + 1, :] - self.gamma * gamma * next_values[i + 1, :]).sum()
+                        if self.log_gradients:
+                            actor_loss_ = actor_loss_ + (- rew_acc_[i + 1, :] - self.gamma * gamma * next_values_[i + 1, :]).sum()
+                            actor_loss_diff = actor_loss_diff + (- rew_acc_diff[i + 1, :] - self.gamma * gamma * next_values_diff[i + 1, :]).sum()
                     else:
                         actor_loss = actor_loss + (- rew_acc[i + 1, :]).sum() #- self.gamma * gamma * next_values[i + 1, :]).sum()
 
@@ -1324,12 +1756,15 @@ class NeuroDiffSim:
             # clear up gamma and rew_acc for done envs
             gamma[done_env_ids] = 1.
             rew_acc[i + 1, done_env_ids] = 0.
+            if self.log_gradients:
+                rew_acc_[i + 1, done_env_ids] = 0.
+                rew_acc_diff[i + 1, done_env_ids] = 0.
 
             # collect data for critic training
             with torch.no_grad():
                 if self.decouple_value_actors:
                     self.rew_buf[i] = rew[:self.apg_num_actors].clone()
-                    if i < self.steps_num - 1:
+                    if i < horizon - 1:
                         self.done_mask[i] = done[:self.apg_num_actors].clone().to(torch.float32)
                     else:
                         self.done_mask[i, :] = 1.
@@ -1338,7 +1773,7 @@ class NeuroDiffSim:
                         self.done_buf[i] = done[:self.apg_num_actors].clone().to(torch.float32)
                 else:
                     self.rew_buf[i] = rew.clone()
-                    if i < self.steps_num - 1:
+                    if i < horizon - 1:
                         self.done_mask[i] = done.clone().to(torch.float32)
                     else:
                         self.done_mask[i, :] = 1.
@@ -1372,7 +1807,10 @@ class NeuroDiffSim:
             self.time_report.end_timer("collecting episode loss")
 
         #actor_loss /= self.steps_num * self.num_envs * self.steps_num / 2
-        actor_loss /= self.steps_num * (self.num_envs + self.imagined_batch_size)
+        actor_loss /= horizon * (self.num_envs + self.imagined_batch_size)
+        if self.log_gradients:
+            actor_loss_ /= horizon * (self.num_envs + self.imagined_batch_size)
+            actor_loss_diff /= horizon * (self.num_envs + self.imagined_batch_size)
 
         #dyn_loss /= self.steps_num * self.num_envs ###
         #actor_loss /= samples_used ##
@@ -1384,7 +1822,7 @@ class NeuroDiffSim:
         self.actor_loss = actor_loss.detach().cpu().item()
         #self.dyn_loss = dyn_loss.detach().cpu().item() ###
 
-        self.step_count += self.steps_num * self.num_envs
+        self.step_count += horizon * self.num_envs
 
         if self.avantage_objective:
             with torch.no_grad():
@@ -1396,6 +1834,9 @@ class NeuroDiffSim:
         #self.dyn_model_optimizer.zero_grad()
         #(dyn_loss * 2).backward(retain_graph = True) # 2 for action on ant
         #self.dyn_model_optimizer.step()
+
+        if self.log_gradients:
+            return actor_loss, actor_loss_, actor_loss_diff
 
         return actor_loss
 
@@ -1551,7 +1992,10 @@ class NeuroDiffSim:
             if self.act_rms is not None:
                 actions_concat = self.act_rms.normalize(actions_concat.clone())
 
-            target_observations = next_observations_concat - observations_concat
+            if self.no_residual_dyn_model:
+                target_observations = next_observations_concat
+            else:
+                target_observations = next_observations_concat - observations_concat
 
             if self.vae:
                 if self.dyn_recurrent:
@@ -1611,12 +2055,18 @@ class NeuroDiffSim:
                     inv_var = torch.exp(-pred_next_logvar)
                     mse_loss_inv = ((torch.pow(pred_next_obs - target_observations, 2) * inv_var) * mask_concat.unsqueeze(-1)).sum() / (mask_concat.sum() * self.num_obs)
                     var_loss = (pred_next_logvar * mask_concat.unsqueeze(-1)).sum() / (mask_concat.sum() * self.num_obs)
-                    loss = mse_loss_inv + var_loss
+                    if self.no_stoch_dyn_model:
+                        loss = (F.mse_loss(pred_next_obs, target_observations, reduction = "none") * mask_concat.unsqueeze(-1)).sum() / (mask_concat.sum() * self.num_obs)
+                    else:
+                        loss = mse_loss_inv + var_loss
                 else:
                     inv_var = torch.exp(-pred_next_logvar)
                     mse_loss_inv = (torch.pow(pred_next_obs - target_observations, 2) * inv_var).mean()
                     var_loss = pred_next_logvar.mean()
-                    loss = mse_loss_inv + var_loss
+                    if self.no_stoch_dyn_model:
+                        loss = F.mse_loss(pred_next_obs, target_observations, reduction = "none").mean()
+                    else:
+                        loss = mse_loss_inv + var_loss
 
                 if self.learn_reward:
                     if self.num_bins == 0:
@@ -1677,17 +2127,36 @@ class NeuroDiffSim:
         self.episode_length = torch.zeros(self.num_envs, dtype = int, device = self.device)
         self.episode_gamma = torch.ones(self.num_envs, dtype = torch.float32, device = self.device)
         
+        self.mega_gradient_diff = None
+        self.mega_gradient_ = None
+        self.mega_gradient = None
         def actor_closure():
             #self.actor_optimizer.zero_grad()
             self.time_report.start_timer("compute actor loss")
 
             self.time_report.start_timer("forward simulation")
-            actor_loss = self.compute_actor_loss()
+            if self.log_gradients:
+                actor_loss, actor_loss_, actor_loss_diff = self.compute_actor_loss()
+            else:
+                actor_loss = self.compute_actor_loss()
             self.time_report.end_timer("forward simulation")
 
             self.time_report.start_timer("backward simulation")
-            self.actor_optimizer.zero_grad()
-            actor_loss.backward()
+            if self.log_gradients:
+                self.actor_optimizer.zero_grad()
+                actor_loss_diff.backward()
+                self.mega_gradient_diff = gather_all_gradients(self.actor)
+
+                self.actor_optimizer.zero_grad()
+                actor_loss_.backward()
+                self.mega_gradient_ = gather_all_gradients(self.actor)
+
+                self.actor_optimizer.zero_grad()
+                actor_loss.backward()
+                self.mega_gradient = gather_all_gradients(self.actor)
+            else:
+                self.actor_optimizer.zero_grad()
+                actor_loss.backward()
             self.time_report.end_timer("backward simulation")
 
             with torch.no_grad():
@@ -1695,7 +2164,7 @@ class NeuroDiffSim:
                 if self.truncate_grad:
                     clip_grad_norm_(self.actor.parameters(), self.grad_norm)
                 self.grad_norm_after_clip = tu.grad_norm(self.actor.parameters())
-                
+
                 # sanity check
                 if torch.isnan(self.grad_norm_before_clip): #or self.grad_norm_before_clip > 1000000.:
                     print('NaN gradient')
@@ -1705,7 +2174,29 @@ class NeuroDiffSim:
 
             return actor_loss
 
+        if self.load_pretrain_dataset:
+            self.min_replay = self.num_envs
         self.fill_replay_buffer()
+        if self.generate_dataset_only:
+            filename = 'dataset'
+            torch.save([
+                self.actor,
+                self.dyn_rb.observations,
+                self.dyn_rb.actions,
+                self.dyn_rb.next_observations,
+                self.dyn_rb.dones,
+                self.dyn_rb.rewards,
+                self.dyn_rb.p_ini_hidden_in,
+                self.dyn_rb.num_envs,
+                self.dyn_rb.pos,
+                self.obs_rms,
+                self.act_rms,
+                self.ret_rms
+            ], os.path.join(self.log_dir, "{}.pt".format(filename))) # /!\ Handle correctly self.prev_start_idx when reloading and restructuring this data
+            self.close()
+            return
+
+        self.env.pretrained = True
 
         # main training process
         for epoch in range(self.max_epochs):
@@ -1733,6 +2224,8 @@ class NeuroDiffSim:
             self.time_report.start_timer("actor training")
             actor_loss = self.actor_optimizer.step(actor_closure)
             self.time_report.end_timer("actor training")
+
+            #AMP#self.env.update_prev_amp_model()
 
             # train critic
             # prepare dataset
@@ -1788,6 +2281,17 @@ class NeuroDiffSim:
             #self.writer.add_scalar('dyn_loss/iter', self.dyn_loss, self.iter_count) ###
             self.writer.add_scalar('value_loss/step', self.value_loss, self.step_count)
             self.writer.add_scalar('value_loss/iter', self.value_loss, self.iter_count)
+
+            if self.log_gradients:
+                #true_vs_demo_grad = torch.norm(self.mega_gradient_diff - self.mega_gradient).cpu().item()
+                #true_vs_img_grad = torch.norm(self.mega_gradient_diff - self.mega_gradient_).cpu().item()
+                true_vs_demo_grad = F.cosine_similarity(self.mega_gradient_diff, self.mega_gradient, dim=0).cpu().item()
+                true_vs_img_grad = F.cosine_similarity(self.mega_gradient_diff, self.mega_gradient_, dim=0).cpu().item()
+                self.writer.add_scalar('gradients/true_vs_demo/step', true_vs_demo_grad, self.step_count)
+                self.writer.add_scalar('gradients/true_vs_demo/iter', true_vs_demo_grad, self.iter_count)
+                self.writer.add_scalar('gradients/true_vs_img/step', true_vs_img_grad, self.step_count)
+                self.writer.add_scalar('gradients/true_vs_img/iter', true_vs_img_grad, self.iter_count)
+
             #self.writer.add_scalar('discarded_ratio/step', self.discarded_ratio, self.step_count) ##
             if len(self.episode_loss_his) > 0:
                 mean_episode_length = self.episode_length_meter.get_mean()
@@ -1816,8 +2320,12 @@ class NeuroDiffSim:
                 mean_policy_loss = np.inf
                 mean_policy_discounted_loss = np.inf
                 mean_episode_length = 0
-            
-            print('iter {}: ep loss {:.2f}, ep discounted loss {:.2f}, ep len {:.1f}, fps total {:.2f}, value loss {:.2f}, grad norm before clip {:.10f}, grad norm after clip {:.2f}, dyn loss {:.2f}'.format(\
+
+            if self.log_gradients:
+                print('iter {}: ep loss {:.2f}, ep discounted loss {:.2f}, ep len {:.1f}, fps total {:.2f}, value loss {:.2f}, grad norm before clip {:.10f}, grad norm after clip {:.2f}, dyn loss {:.2f}, true_vs_demo_gradnorm: {:.2f}, true_vs_img_gradnorm: {:.2f}'.format(\
+                    self.iter_count, mean_policy_loss, mean_policy_discounted_loss, mean_episode_length, self.steps_num * self.num_envs / (time_end_epoch - time_start_epoch), self.value_loss, self.grad_norm_before_clip, self.grad_norm_after_clip, self.dyn_loss, true_vs_demo_grad, true_vs_img_grad))
+            else:
+                print('iter {}: ep loss {:.2f}, ep discounted loss {:.2f}, ep len {:.1f}, fps total {:.2f}, value loss {:.2f}, grad norm before clip {:.10f}, grad norm after clip {:.2f}, dyn loss {:.2f}'.format(\
                     self.iter_count, mean_policy_loss, mean_policy_discounted_loss, mean_episode_length, self.steps_num * self.num_envs / (time_end_epoch - time_start_epoch), self.value_loss, self.grad_norm_before_clip, self.grad_norm_after_clip, self.dyn_loss))
 
             self.writer.flush()

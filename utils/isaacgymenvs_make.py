@@ -39,18 +39,30 @@ from omegaconf import DictConfig
 from isaacgymenvs.utils.reformat import omegaconf_to_dict
 from tasks.ant_render import AntRender
 from tasks.anymal_render import AnymalRender
+from tasks.franka_cube_stack_render import FrankaCubeStackRender
 from tasks.go2_terrain_render import Go2TerrainRender
+from tasks.go2_bipedal_render import Go2BipedalRender
+from tasks.go2_bipedal_amp_render import Go2BipedalAMPRender
+from isaacgymenvs.tasks.go2_bipedal import Go2Bipedal
+from tasks.go2_standing_render import Go2StandingRender
+from isaacgymenvs.tasks.franka_cube_stack import FrankaCubeStack
 
 isaacgym_task_map = {
     "AntRender": AntRender,
     "AnymalRender": AnymalRender,
-    "Go2TerrainRender": Go2TerrainRender
+    "FrankaCubeStackRender": FrankaCubeStackRender,
+    "FrankaCubeStack": FrankaCubeStack,
+    "Go2TerrainRender": Go2TerrainRender,
+    "Go2StandingRender": Go2StandingRender,
+    "Go2BipedalRender": Go2BipedalRender,
+    "Go2BipedalAMPRender": Go2BipedalAMPRender,
+    "Go2Bipedal": Go2Bipedal
 }
 
 def make(
-    seed: int, 
-    task: str, 
-    num_envs: int, 
+    seed: int,
+    task: str,
+    num_envs: int,
     sim_device: str,
     rl_device: str,
     graphics_device_id: int = -1,
@@ -59,7 +71,7 @@ def make(
     virtual_screen_capture: bool = False,
     force_render: bool = True,
     cfg: DictConfig = None
-): 
+):
     # from isaacgymenvs.utils.rlgames_utils import get_rlgames_env_creator
     # create hydra config if no config passed in
     if cfg is None:

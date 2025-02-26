@@ -28,6 +28,10 @@ params:
       vmin: -10.0
       vmax: 10.0
       use_bins: True
+      recurrent: True #/!\#
+      seq_len: 25 # 50
+      hidden_size: 256
+      hidden_to_value: True
 
   config:
     name: df_shadow_hand_neuro_diff_sim
@@ -44,17 +48,17 @@ params:
     num_batch: 4
     gamma: 0.99
     betas: [0.7, 0.95] # adam
-    max_epochs: 10000 # 4000 # 2000 # 4000
+    max_epochs: 15000 # 10000 # 4000 # 2000 # 4000
     steps_num: 16 # 16
     grad_norm: 1.0 
     truncate_grads: True
-    num_actors: 1024 # 64
+    num_actors: 512 # 64
     save_interval: 400
-    dyn_buffer_size: 1e6
+    dyn_buffer_size: 999936 # 1e6
     dyn_udt: 128 # 128 # 256
     init_dyn_udt: 10000 # 1000
     min_replay: 40000 # 4000
-    dyn_pred_batch_size: 1024
+    dyn_pred_batch_size: 64 # 1024 #/!\#
     filter_sigma_events: True
     learn_reward: False
 

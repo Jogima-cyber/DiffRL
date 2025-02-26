@@ -19,6 +19,7 @@ class CriticMLP(nn.Module):
         self.device = device
         self.dyn_recurrent = cfg_network["dyn_model_mlp"].get("recurrent", False)
         self.act_recurrent = cfg_network["actor_mlp"].get("recurrent", False)
+        self.hid_act_to_crit = False
         self.hidden_to_value = cfg_network["dyn_model_mlp"].get("hidden_to_value", True)
 
         self.obs_total_size = obs_dim
@@ -27,7 +28,7 @@ class CriticMLP(nn.Module):
             self.hidden_size = int(cfg_network["dyn_model_mlp"].get("hidden_size", 128))
             self.obs_total_size += self.hidden_size
 
-        if self.act_recurrent:
+        if self.act_recurrent and self.hid_act_to_crit:
             self.act_hidden_size = int(cfg_network["actor_mlp"].get("hidden_size", 128))
             self.obs_total_size += self.act_hidden_size
 
@@ -44,7 +45,7 @@ class CriticMLP(nn.Module):
                 modules.append(torch.nn.LayerNorm(self.layer_dims[i + 1]))
 
         self.critic = nn.Sequential(*modules).to(device)
-    
+
         self.obs_dim = obs_dim
 
     def forward(self, observations):

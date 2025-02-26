@@ -472,8 +472,8 @@ class SNUHumanoidEnv(DFlexEnv):
         self.reset_buf = torch.where(invalid_masks, torch.ones_like(self.reset_buf), self.reset_buf)
 
         self.rew_buf[invalid_masks] = 0.
-    
-    def diffRecalculateReward(self, obs, actions, offids = None, imagined_trajs = False):
+
+    def diffRecalculateReward(self, obs, actions, last_actions, last_last_actions, offids = None, imagined_trajs = False, maac = False):
         actions = actions * 0.5 + 0.5
 
         up_reward = 0.1 * obs[:, 51]
@@ -483,23 +483,24 @@ class SNUHumanoidEnv(DFlexEnv):
         height_reward = torch.clip(height_diff, -1.0, self.termination_tolerance)
         height_reward = torch.where(height_reward < 0.0, -200.0 * height_reward * height_reward, height_reward) # JIE: not smooth
         height_reward = torch.where(height_reward > 0.0, self.height_rew_scale * height_reward, height_reward)
-        
+
         act_penalty = torch.sum(torch.abs(actions), dim = -1) * self.action_penalty #torch.sum(self.actions ** 2, dim = -1) * self.action_penalty
 
         progress_reward = obs[:, 5]
 
         rew = progress_reward + up_reward + heading_reward + act_penalty
 
-        if offids is None:
-            if imagined_trajs:
-                rew[:self.num_envs][self.invalid_masks] = 0.
+        if not maac:
+            if offids is None:
+                if imagined_trajs:
+                    rew[:self.num_envs][self.invalid_masks] = 0.
+                else:
+                    rew[self.invalid_masks] = 0.
             else:
-                rew[self.invalid_masks] = 0.
-        else:
-            if imagined_trajs:
-                rew[:self.num_envs][self.invalid_masks[offids]] = 0.
-            else:
-                rew[self.invalid_masks[offids]] = 0.
+                if imagined_trajs:
+                    rew[:self.num_envs][self.invalid_masks[offids]] = 0.
+                else:
+                    rew[self.invalid_masks[offids]] = 0.
         return rew
 
     def imgDone(self, obs):
